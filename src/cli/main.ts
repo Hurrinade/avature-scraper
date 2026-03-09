@@ -1,12 +1,15 @@
 import { parseArgs, printUsage } from "./args.ts";
-import { runPipeline } from "../pipeline/run.ts";
+import { runScraper } from "../scraper/run.ts";
 
 export async function main(argv: string[]): Promise<void> {
-  if (argv.includes("--help") || argv.includes("-h")) {
+  const args = parseArgs(argv);
+  if (args.help) {
     printUsage();
     return;
   }
 
-  const args = parseArgs(argv);
-  await runPipeline(args);
+  await runScraper({
+    limitHosts: args.limitHosts,
+    limitJobs: args.limitJobs,
+  });
 }

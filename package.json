@@ -4,11 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun run index.ts all",
-    "profile": "bun run index.ts profile",
-    "inventory": "bun run index.ts inventory",
-    "details": "bun run index.ts details",
-    "normalize": "bun run index.ts normalize",
+    "start": "bun run index.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
   },
@@ -18,7 +14,6 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
-    "p-limit": "^7.3.0",
-    "zod": "^4.3.6"
+    "p-limit": "^7.3.0"
   }
 }
