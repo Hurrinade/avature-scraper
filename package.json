@@ -1,0 +1,25 @@
+{
+  "name": "avature-scraper",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run index.ts all",
+    "profile": "bun run index.ts profile",
+    "inventory": "bun run index.ts inventory",
+    "details": "bun run index.ts details",
+    "normalize": "bun run index.ts normalize",
+    "resume": "bun run index.ts resume",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "p-limit": "^7.3.0",
+    "zod": "^4.3.6"
+  }
+}
