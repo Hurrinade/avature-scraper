@@ -14,11 +14,7 @@ import {
   templateFromUrl,
   type ListingTemplate,
 } from "./generate-listings.ts";
-import {
-  appendReject,
-  nowIso,
-  type RuntimeConfig,
-} from "./runtime.ts";
+import { appendReject, nowIso, type RuntimeConfig } from "./runtime.ts";
 
 export interface DiscoveryResult {
   jobUrls: JobUrlRecord[];
@@ -90,6 +86,7 @@ async function crawlListingTemplate(
   globalSeen: Set<string>,
   records: JobUrlRecord[],
 ): Promise<void> {
+  console.log("crawling template", template, config.generateMaxPages);
   const paginationEnabled =
     config.profileSourceMode === "generate" && template.supportsPagination;
   const maxPages = paginationEnabled ? config.generateMaxPages : 1;
@@ -104,6 +101,8 @@ async function crawlListingTemplate(
       currentOffset,
       paginationEnabled,
     );
+
+    console.log("crawling page", template.url, currentOffset, maxPages);
 
     try {
       const response = await performHttpRequest(
@@ -223,6 +222,7 @@ export async function discoverJobUrls(
       }
 
       const templates = collectListingTemplates(config, profile);
+
       for (const template of templates) {
         await crawlListingTemplate(
           config,

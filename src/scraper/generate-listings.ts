@@ -1,7 +1,8 @@
 import type { HostProfile } from "../types/index.ts";
-import { canonicalizeUrl, safeParseUrl } from "../utils/url.ts";
+import { canonicalizeUrl, hasBlockedPath, safeParseUrl } from "../utils/url.ts";
 
 const DEFAULT_PAGE_SIZE = 12;
+const LISTING_HINTS = [/\/careers\b/i, /searchjobs/i];
 
 export interface ListingTemplate {
   url: string;
@@ -17,11 +18,11 @@ function parsePositiveInt(raw: string | null): number | null {
 }
 
 function hasPaginationHint(parsed: URL): boolean {
-  const pathname = parsed.pathname.toLowerCase();
-  if (pathname.includes("/searchjobs")) return true;
-  if (parsed.searchParams.has("jobOffset")) return true;
-  if (parsed.searchParams.has("jobRecordsPerPage")) return true;
-  return false;
+  const full = `${parsed.pathname}${parsed.search}`.toLowerCase();
+  if (hasBlockedPath(parsed.toString())) return false;
+  if (/jobdetail|jobdetails/.test(full)) return false;
+
+  return LISTING_HINTS.some((pattern) => pattern.test(full));
 }
 
 function canonicalOrNull(raw: string): string | null {
@@ -35,7 +36,9 @@ export function templateFromUrl(raw: string): ListingTemplate | null {
   const parsed = safeParseUrl(canonical);
   if (!parsed) return null;
 
-  const pageSize = parsePositiveInt(parsed.searchParams.get("jobRecordsPerPage"));
+  const pageSize = parsePositiveInt(
+    parsed.searchParams.get("jobRecordsPerPage"),
+  );
 
   return {
     url: canonical,

@@ -113,6 +113,13 @@ function extractPaginationLegend(
   const pageSize = rangeEnd - rangeStart + 1;
   if (pageSize <= 0) return undefined;
 
+  console.log("paginationLegend", {
+    rangeStart,
+    rangeEnd,
+    totalResults,
+    pageSize,
+  });
+
   return {
     rangeStart,
     rangeEnd,
