@@ -11,5 +11,7 @@ export async function main(argv: string[]): Promise<void> {
   await runScraper({
     limitHosts: args.limitHosts,
     limitJobs: args.limitJobs,
+    profileSourceMode: args.profileSourceMode,
+    hostProfilesFile: args.hostProfilesFile,
   });
 }

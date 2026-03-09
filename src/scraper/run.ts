@@ -1,9 +1,8 @@
 import { extractJobDetail } from "../extractors/jobDetail.ts";
-import type { JobOutput, RunOptions } from "../types/index.ts";
+import type { HostProfile, JobOutput, RunOptions } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
 import { fetchWithRetry } from "../utils/fetchWithRetry.ts";
-import { fileExists, writeJsonFile } from "../utils/fs.ts";
-import { appendJsonl } from "../utils/jsonl.ts";
+import { fileExists, readJsonFile, writeJsonFile } from "../utils/fs.ts";
 import { extractHost } from "../utils/url.ts";
 import { dedupeJobs } from "./dedupe.ts";
 import { discoverJobUrls } from "./discovery.ts";
@@ -12,7 +11,7 @@ import {
   appendReject,
   buildConfig,
   fetchOptions,
-  resetOutputFiles,
+  resetExtractionOutputFiles,
   type RuntimeConfig,
 } from "./runtime.ts";
 import { collectSeedHosts } from "./seeds.ts";
@@ -59,14 +58,85 @@ async function fetchJobDetails(
   return jobs.filter((job): job is JobOutput => Boolean(job));
 }
 
-export async function runScraper(options: RunOptions = {}): Promise<void> {
-  const config = buildConfig(options);
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
+function parseHostProfiles(raw: unknown): HostProfile[] {
+  if (!Array.isArray(raw)) {
+    throw new Error("Host profiles file must contain a JSON array");
+  }
+
+  return raw.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new Error(
+        `Invalid host profile at index ${index}: expected object`,
+      );
+    }
+
+    const candidate = item as Partial<HostProfile>;
+    if (typeof candidate.host !== "string" || !candidate.host.trim()) {
+      throw new Error(`Invalid host profile at index ${index}: missing host`);
+    }
+
+    if (
+      candidate.reachability !== "reachable" &&
+      candidate.reachability !== "blocked" &&
+      candidate.reachability !== "unreachable"
+    ) {
+      throw new Error(
+        `Invalid host profile at index ${index}: bad reachability`,
+      );
+    }
+
+    if (!isStringArray(candidate.reachableListingUrls)) {
+      throw new Error(
+        `Invalid host profile at index ${index}: reachableListingUrls must be string[]`,
+      );
+    }
+
+    if (!isStringArray(candidate.reachableSeedDetailUrls)) {
+      throw new Error(
+        `Invalid host profile at index ${index}: reachableSeedDetailUrls must be string[]`,
+      );
+    }
+
+    return {
+      host: candidate.host,
+      reachability: candidate.reachability,
+      candidateCount: Number(candidate.candidateCount) || 0,
+      reachableCandidateCount: Number(candidate.reachableCandidateCount) || 0,
+      unreachableCandidateCount:
+        Number(candidate.unreachableCandidateCount) || 0,
+      reachableListingUrls: candidate.reachableListingUrls,
+      reachableSeedDetailUrls: candidate.reachableSeedDetailUrls,
+      checkedAt:
+        typeof candidate.checkedAt === "string" && candidate.checkedAt
+          ? candidate.checkedAt
+          : new Date(0).toISOString(),
+    } satisfies HostProfile;
+  });
+}
+
+async function loadHostProfiles(config: RuntimeConfig): Promise<HostProfile[]> {
+  if (!fileExists(config.hostProfilesFile)) {
+    throw new Error(`Host profiles file not found: ${config.hostProfilesFile}`);
+  }
+
+  const raw = await readJsonFile<unknown>(config.hostProfilesFile);
+  return parseHostProfiles(raw);
+}
+
+export async function runProfileBuilder(
+  options: RunOptions = {},
+): Promise<void> {
+  const config = buildConfig({ ...options, writeRejects: false });
 
   if (!fileExists(config.inputUrlsFile)) {
     throw new Error(`Input URL file not found: ${config.inputUrlsFile}`);
   }
-
-  await resetOutputFiles(config);
 
   console.log(`[seeds] reading ${config.inputUrlsFile}`);
   const seedHosts = await collectSeedHosts(config);
@@ -74,16 +144,39 @@ export async function runScraper(options: RunOptions = {}): Promise<void> {
 
   console.log(`[profile] profiling hosts`);
   const profiles = await profileHosts(config, seedHosts);
-  for (const profile of profiles) {
-    await appendJsonl(config.hostProfilesPath, profile);
-  }
+  await writeJsonFile(config.hostProfilesFile, profiles);
+
   const reachableHosts = profiles.filter(
     (profile) => profile.reachability === "reachable",
   ).length;
-  console.log(`[profile] reachable hosts: ${reachableHosts}/${profiles.length}`);
+  console.log(
+    `[profile] reachable hosts: ${reachableHosts}/${profiles.length}`,
+  );
+  console.log(`[profile] output: ${config.hostProfilesFile}`);
+}
+
+export async function runScraper(options: RunOptions = {}): Promise<void> {
+  const config = buildConfig(options);
+  const profiles = await loadHostProfiles(config);
+  const scopedProfiles =
+    typeof config.limitHosts === "number"
+      ? profiles.slice(0, config.limitHosts)
+      : profiles;
+
+  console.log(
+    `[profiles] loaded ${scopedProfiles.length} host profiles from ${config.hostProfilesFile}`,
+  );
+
+  if (config.profileSourceMode === "generate") {
+    throw new Error(
+      "TODO_NOT_IMPLEMENTED: profile-source-mode=generate is not implemented yet.",
+    );
+  }
+
+  await resetExtractionOutputFiles(config);
 
   console.log(`[discovery] extracting job detail URLs`);
-  const discovery = await discoverJobUrls(config, profiles);
+  const discovery = await discoverJobUrls(config, scopedProfiles);
   console.log(`[discovery] unique detail URLs: ${discovery.jobUrls.length}`);
 
   const allDetailUrls = Array.from(

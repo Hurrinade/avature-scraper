@@ -2,9 +2,7 @@ import type { HostProfile, SeedHost } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
 import { fetchWithRetry } from "../utils/fetchWithRetry.ts";
 import {
-  buildHostFallbackUrls,
   canonicalDetailUrl,
-  extractQueryParamKeys,
   isLikelyJobDetailUrl,
   isLikelyListingUrl,
 } from "../utils/url.ts";
@@ -19,26 +17,17 @@ async function profileHost(
   config: RuntimeConfig,
   seedHost: SeedHost,
 ): Promise<HostProfile> {
-  // Mix explicit seed URLs with known Avature fallback paths per host.
-  const candidates = Array.from(
-    new Set([
-      ...seedHost.candidateUrls,
-      ...buildHostFallbackUrls(seedHost.host),
-    ]),
-  );
+  // Seed-only behavior: profile only URLs that came from Urls.txt.
+  const candidates = Array.from(new Set(seedHost.candidateUrls));
 
   const reachableListings = new Set<string>();
   const reachableSeedDetails = new Set<string>();
-  const queryParamKeys = new Set<string>();
 
+  let reachableCandidateCount = 0;
+  let unreachableCandidateCount = 0;
   let blockedResponses = 0;
 
   for (const candidate of candidates) {
-    // Capture query keys from the URL itself so discovery can reuse them later.
-    for (const key of extractQueryParamKeys(candidate)) {
-      queryParamKeys.add(key);
-    }
-
     try {
       const response = await fetchWithRetry(candidate, fetchOptions(config));
 
@@ -47,6 +36,7 @@ async function profileHost(
       }
 
       if (!response.ok) {
+        unreachableCandidateCount += 1;
         await appendReject(config, {
           stage: "profile",
           host: seedHost.host,
@@ -57,12 +47,7 @@ async function profileHost(
         continue;
       }
 
-      const body = await response.text();
-      // Capture query keys hinted by page content (common Avature pagination patterns).
-      if (/joboffset/i.test(body)) queryParamKeys.add("jobOffset");
-      if (/jobrecordsperpage/i.test(body))
-        queryParamKeys.add("jobRecordsPerPage");
-      if (/listfiltermode/i.test(body)) queryParamKeys.add("listFilterMode");
+      reachableCandidateCount += 1;
 
       // Check if candidate is a listing url
       if (isLikelyListingUrl(candidate)) {
@@ -77,6 +62,7 @@ async function profileHost(
         }
       }
     } catch {
+      unreachableCandidateCount += 1;
       await appendReject(config, {
         stage: "profile",
         host: seedHost.host,
@@ -108,14 +94,15 @@ async function profileHost(
     host: seedHost.host,
     reachability,
     candidateCount: candidates.length,
+    reachableCandidateCount,
+    unreachableCandidateCount,
     reachableListingUrls: Array.from(reachableListings),
     reachableSeedDetailUrls: Array.from(reachableSeedDetails),
-    queryParamKeys: Array.from(queryParamKeys).sort(),
     checkedAt: nowIso(),
   };
 }
 
-// Stage 2: validate each host and capture reusable listing/query patterns.
+// Stage 2: validate seeded host URLs and capture reusable query-pattern hints.
 export async function profileHosts(
   config: RuntimeConfig,
   seedHosts: SeedHost[],

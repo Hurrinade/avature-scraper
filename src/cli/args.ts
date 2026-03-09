@@ -1,4 +1,8 @@
-import type { CliArgs } from "../types/index.ts";
+import type {
+  CliArgs,
+  ProfileCliArgs,
+  ProfileSourceMode,
+} from "../types/index.ts";
 
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -20,10 +24,46 @@ export function parseArgs(argv: string[]): CliArgs {
 
     if (token.startsWith("--limit-jobs=")) {
       args.limitJobs = parsePositiveInt(token.split("=")[1]);
+      continue;
+    }
+
+    if (token.startsWith("--profile-source-mode=")) {
+      args.profileSourceMode = parseProfileSourceMode(token.split("=")[1]);
+      continue;
+    }
+
+    if (token.startsWith("--host-profiles-file=")) {
+      const value = token.split("=")[1]?.trim();
+      if (value) args.hostProfilesFile = value;
     }
   }
 
   return args;
+}
+
+export function parseProfileArgs(argv: string[]): ProfileCliArgs {
+  const args: ProfileCliArgs = {
+    help: argv.includes("--help") || argv.includes("-h"),
+  };
+
+  for (const token of argv.slice(2)) {
+    if (token.startsWith("--limit-hosts=")) {
+      args.limitHosts = parsePositiveInt(token.split("=")[1]);
+      continue;
+    }
+
+    if (token.startsWith("--host-profiles-file=")) {
+      const value = token.split("=")[1]?.trim();
+      if (value) args.hostProfilesFile = value;
+    }
+  }
+
+  return args;
+}
+
+function parseProfileSourceMode(raw: string | undefined): ProfileSourceMode | undefined {
+  if (raw === "seeded" || raw === "generate") return raw;
+  return undefined;
 }
 
 export function printUsage(): void {
@@ -34,6 +74,20 @@ Usage:
 Options:
   --limit-hosts=<n>
   --limit-jobs=<n>
+  --profile-source-mode=seeded|generate
+  --host-profiles-file=<path>
+  -h, --help
+`);
+}
+
+export function printProfileUsage(): void {
+  console.log(`
+Usage:
+  bun run profile [options]
+
+Options:
+  --limit-hosts=<n>
+  --host-profiles-file=<path>
   -h, --help
 `);
 }
