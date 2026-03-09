@@ -2,6 +2,7 @@ import { extractJobDetail } from "../extractors/jobDetail.ts";
 import type { HostProfile, JobOutput, RunOptions } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
 import { fileExists, readJsonFile, writeJsonFile } from "../utils/fs.ts";
+import { performHttpRequest } from "../utils/httpRequest.ts";
 import { extractHost } from "../utils/url.ts";
 import { dedupeJobs } from "./dedupe.ts";
 import { discoverJobUrls } from "./discovery.ts";
@@ -26,28 +27,28 @@ async function fetchJobDetails(
       const host = extractHost(detailUrl) ?? "unknown";
 
       try {
-        const response = await fetch(detailUrl, {
-          redirect: "follow",
-          headers: {
-            "user-agent": config.userAgent,
-            accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
-          },
-        });
+        const response = await performHttpRequest(
+          detailUrl,
+          config.userAgent,
+          true,
+          config.httpRequestFn,
+        );
 
-        if (!response.ok) {
+        if (
+          response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          !response.bodyText
+        ) {
           await appendReject(config, {
             stage: "details",
             host,
             url: detailUrl,
             reason: "detail_unreachable",
-            httpStatus: response.status,
+            httpStatus: response.statusCode,
           });
           return null;
         }
-
-        const html = await response.text();
-        return extractJobDetail(host, detailUrl, html);
+        return extractJobDetail(host, detailUrl, response.bodyText);
       } catch {
         await appendReject(config, {
           stage: "details",

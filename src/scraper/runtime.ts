@@ -34,6 +34,15 @@ export interface RuntimeConfig {
     port: number,
     timeoutMs: number,
   ) => Promise<boolean>;
+  httpRequestFn?: (
+    url: string,
+    userAgent: string,
+    readBody: boolean,
+  ) => Promise<{
+    statusCode: number;
+    headers: Record<string, string | string[] | undefined>;
+    bodyText?: string;
+  }>;
   generateMaxPages: number;
   generateMaxTemplates: number;
   generateEmptyPageStreak: number;
@@ -141,6 +150,7 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       options.seedProbeRetries ?? 0,
     ),
     seedProbeFn: options.seedProbeFn,
+    httpRequestFn: options.httpRequestFn,
     generateMaxPages: toPositiveInt(
       options.generateMaxPages,
       envPositiveInt("GENERATE_MAX_PAGES", 250),

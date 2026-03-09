@@ -8,11 +8,30 @@ import type {
   JobOutput,
   JobUrlRecord,
   RejectedUrlRecord,
+  RunOptions,
 } from "../types/index.ts";
 import { fileExists, readJsonFile } from "../utils/fs.ts";
 import { readJsonl } from "../utils/jsonl.ts";
 
 const alwaysReachableSeedProbe = async () => true;
+
+function buildHttpRequestFromFetch(
+  fetchImpl: typeof fetch,
+): NonNullable<RunOptions["httpRequestFn"]> {
+  return async (url, _userAgent, readBody) => {
+    const response = await fetchImpl(url);
+    const headers: Record<string, string | string[]> = {};
+    response.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+
+    return {
+      statusCode: response.status,
+      headers,
+      bodyText: readBody ? await response.text() : undefined,
+    };
+  };
+}
 
 function buildMockFetch(requestLog: string[]): typeof fetch {
   return (async (input: string | URL | Request): Promise<Response> => {
@@ -502,7 +521,9 @@ describe("split pipeline integration", () => {
 
     const originalFetch = globalThis.fetch;
     const requests: string[] = [];
-    globalThis.fetch = buildMockFetch(requests);
+    const mockFetch = buildMockFetch(requests);
+    const httpRequestFn = buildHttpRequestFromFetch(mockFetch);
+    globalThis.fetch = mockFetch;
 
     try {
       await runProfileBuilder({
@@ -513,6 +534,7 @@ describe("split pipeline integration", () => {
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
         seedProbeFn: async (host) => host !== "z.example",
+        httpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -551,7 +573,9 @@ describe("split pipeline integration", () => {
 
     const originalFetch = globalThis.fetch;
     const profileRequests: string[] = [];
-    globalThis.fetch = buildMockFetch(profileRequests);
+    const profileMockFetch = buildMockFetch(profileRequests);
+    const profileHttpRequestFn = buildHttpRequestFromFetch(profileMockFetch);
+    globalThis.fetch = profileMockFetch;
     try {
       await runProfileBuilder({
         inputUrlsFile: fixture.inputPath,
@@ -561,13 +585,16 @@ describe("split pipeline integration", () => {
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
         seedProbeFn: async (host) => host !== "z.example",
+        httpRequestFn: profileHttpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;
     }
 
     const scraperRequests: string[] = [];
-    globalThis.fetch = buildMockFetch(scraperRequests);
+    const scraperMockFetch = buildMockFetch(scraperRequests);
+    const scraperHttpRequestFn = buildHttpRequestFromFetch(scraperMockFetch);
+    globalThis.fetch = scraperMockFetch;
     try {
       await runScraper({
         outputDir: fixture.outputDir,
@@ -577,6 +604,7 @@ describe("split pipeline integration", () => {
         discoveryConcurrency: 2,
         detailConcurrency: 2,
         writeRejects: true,
+        httpRequestFn: scraperHttpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -611,7 +639,9 @@ describe("split pipeline integration", () => {
     ]);
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = buildPaginatedMockFetch([]);
+    const profileMockFetch = buildPaginatedMockFetch([]);
+    const profileHttpRequestFn = buildHttpRequestFromFetch(profileMockFetch);
+    globalThis.fetch = profileMockFetch;
     try {
       await runProfileBuilder({
         inputUrlsFile: seededFixture.inputPath,
@@ -621,6 +651,7 @@ describe("split pipeline integration", () => {
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
         seedProbeFn: alwaysReachableSeedProbe,
+        httpRequestFn: profileHttpRequestFn,
       });
       await runProfileBuilder({
         inputUrlsFile: generatedFixture.inputPath,
@@ -630,6 +661,7 @@ describe("split pipeline integration", () => {
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
         seedProbeFn: alwaysReachableSeedProbe,
+        httpRequestFn: profileHttpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -638,7 +670,9 @@ describe("split pipeline integration", () => {
     const seededRequests: string[] = [];
     const generatedRequests: string[] = [];
     try {
-      globalThis.fetch = buildPaginatedMockFetch(seededRequests);
+      const seededMockFetch = buildPaginatedMockFetch(seededRequests);
+      const seededHttpRequestFn = buildHttpRequestFromFetch(seededMockFetch);
+      globalThis.fetch = seededMockFetch;
       await runScraper({
         outputDir: seededFixture.outputDir,
         requestTimeoutMs: 500,
@@ -647,9 +681,13 @@ describe("split pipeline integration", () => {
         discoveryConcurrency: 2,
         detailConcurrency: 2,
         profileSourceMode: "seeded",
+        httpRequestFn: seededHttpRequestFn,
       });
 
-      globalThis.fetch = buildPaginatedMockFetch(generatedRequests);
+      const generatedMockFetch = buildPaginatedMockFetch(generatedRequests);
+      const generatedHttpRequestFn =
+        buildHttpRequestFromFetch(generatedMockFetch);
+      globalThis.fetch = generatedMockFetch;
       await runScraper({
         outputDir: generatedFixture.outputDir,
         requestTimeoutMs: 500,
@@ -661,6 +699,7 @@ describe("split pipeline integration", () => {
         generateMaxPages: 8,
         generateMaxTemplates: 4,
         generateEmptyPageStreak: 2,
+        httpRequestFn: generatedHttpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -693,7 +732,9 @@ describe("split pipeline integration", () => {
     ]);
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = buildPaginatedNoLegendMockFetch([]);
+    const profileMockFetch = buildPaginatedNoLegendMockFetch([]);
+    const profileHttpRequestFn = buildHttpRequestFromFetch(profileMockFetch);
+    globalThis.fetch = profileMockFetch;
     try {
       await runProfileBuilder({
         inputUrlsFile: fixture.inputPath,
@@ -703,13 +744,16 @@ describe("split pipeline integration", () => {
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
         seedProbeFn: alwaysReachableSeedProbe,
+        httpRequestFn: profileHttpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;
     }
 
     const requests: string[] = [];
-    globalThis.fetch = buildPaginatedNoLegendMockFetch(requests);
+    const scraperMockFetch = buildPaginatedNoLegendMockFetch(requests);
+    const scraperHttpRequestFn = buildHttpRequestFromFetch(scraperMockFetch);
+    globalThis.fetch = scraperMockFetch;
     try {
       await runScraper({
         outputDir: fixture.outputDir,
@@ -722,6 +766,7 @@ describe("split pipeline integration", () => {
         generateMaxPages: 8,
         generateMaxTemplates: 4,
         generateEmptyPageStreak: 2,
+        httpRequestFn: scraperHttpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -749,10 +794,12 @@ describe("split pipeline integration", () => {
 
     const originalFetch = globalThis.fetch;
     const requests: string[] = [];
-    globalThis.fetch = buildFastProbeMockFetch(requests, {
+    const mockFetch = buildFastProbeMockFetch(requests, {
       hostCount,
       downHosts,
     });
+    const httpRequestFn = buildHttpRequestFromFetch(mockFetch);
+    globalThis.fetch = mockFetch;
 
     try {
       await runProfileBuilder({
@@ -767,6 +814,7 @@ describe("split pipeline integration", () => {
         profileConcurrency: 8,
         profileCandidateConcurrency: 8,
         seedProbeFn: async (host) => !downHosts.includes(host),
+        httpRequestFn,
       });
     } finally {
       globalThis.fetch = originalFetch;

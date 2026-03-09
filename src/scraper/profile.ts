@@ -5,11 +5,8 @@ import {
   isLikelyJobDetailUrl,
   isLikelyListingUrl,
 } from "../utils/url.ts";
-import {
-  appendReject,
-  nowIso,
-  type RuntimeConfig,
-} from "./runtime.ts";
+import { appendReject, nowIso, type RuntimeConfig } from "./runtime.ts";
+import { performHttpRequest } from "../utils/httpRequest.ts";
 
 async function profileHost(
   config: RuntimeConfig,
@@ -30,27 +27,25 @@ async function profileHost(
     config.profileCandidateConcurrency,
     async (candidate) => {
       try {
-        const response = await fetch(candidate, {
-          redirect: "follow",
-          headers: {
-            "user-agent": config.userAgent,
-            accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
-          },
-        });
+        const response = await performHttpRequest(
+          candidate,
+          config.userAgent,
+          false,
+          config.httpRequestFn,
+        );
 
-        if (response.status === 403 || response.status === 429) {
+        if (response.statusCode === 403 || response.statusCode === 429) {
           blockedResponses += 1;
         }
 
-        if (!response.ok) {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
           unreachableCandidateCount += 1;
           await appendReject(config, {
             stage: "profile",
             host: seedHost.host,
             url: candidate,
             reason: "unreachable_candidate",
-            httpStatus: response.status,
+            httpStatus: response.statusCode,
           });
           return;
         }
@@ -67,7 +62,8 @@ async function profileHost(
             reachableSeedDetails.add(canonical);
           }
         }
-      } catch {
+      } catch (error) {
+        console.log("error", error);
         unreachableCandidateCount += 1;
         await appendReject(config, {
           stage: "profile",

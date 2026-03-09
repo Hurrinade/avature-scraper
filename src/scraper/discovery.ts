@@ -1,6 +1,7 @@
 import { extractJobLinksFromPage } from "../extractors/listing.ts";
 import type { HostProfile, JobUrlRecord } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
+import { getHeader, performHttpRequest } from "../utils/httpRequest.ts";
 import { appendJsonl } from "../utils/jsonl.ts";
 import {
   canonicalDetailUrl,
@@ -105,33 +106,33 @@ async function crawlListingTemplate(
     );
 
     try {
-      const response = await fetch(pageUrl, {
-        redirect: "follow",
-        headers: {
-          "user-agent": config.userAgent,
-          accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
-        },
-      });
+      const response = await performHttpRequest(
+        pageUrl,
+        config.userAgent,
+        true,
+        config.httpRequestFn,
+      );
 
-      if (!response.ok) {
+      if (
+        response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        !response.bodyText
+      ) {
         if (pageIndex === 0) {
           await appendReject(config, {
             stage: "discovery",
             host: profile.host,
             url: pageUrl,
             reason: "listing_unreachable",
-            httpStatus: response.status,
+            httpStatus: response.statusCode,
           });
         }
         break;
       }
-
-      const body = await response.text();
       const extraction = extractJobLinksFromPage(
         pageUrl,
-        body,
-        response.headers.get("content-type"),
+        response.bodyText,
+        getHeader(response.headers, "content-type"),
       );
 
       // Only log rejections that match our hard filters to keep reject logs concise.

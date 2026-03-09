@@ -84,6 +84,15 @@ export interface RunOptions {
     port: number,
     timeoutMs: number,
   ) => Promise<boolean>;
+  httpRequestFn?: (
+    url: string,
+    userAgent: string,
+    readBody: boolean,
+  ) => Promise<{
+    statusCode: number;
+    headers: Record<string, string | string[] | undefined>;
+    bodyText?: string;
+  }>;
   generateMaxPages?: number;
   generateMaxTemplates?: number;
   generateEmptyPageStreak?: number;
