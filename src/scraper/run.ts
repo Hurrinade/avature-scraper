@@ -1,7 +1,6 @@
 import { extractJobDetail } from "../extractors/jobDetail.ts";
 import type { HostProfile, JobOutput, RunOptions } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
-import { fetchWithRetry } from "../utils/fetchWithRetry.ts";
 import { fileExists, readJsonFile, writeJsonFile } from "../utils/fs.ts";
 import { extractHost } from "../utils/url.ts";
 import { dedupeJobs } from "./dedupe.ts";
@@ -10,7 +9,6 @@ import { profileHosts } from "./profile.ts";
 import {
   appendReject,
   buildConfig,
-  fetchOptions,
   resetExtractionOutputFiles,
   type RuntimeConfig,
 } from "./runtime.ts";
@@ -28,7 +26,14 @@ async function fetchJobDetails(
       const host = extractHost(detailUrl) ?? "unknown";
 
       try {
-        const response = await fetchWithRetry(detailUrl, fetchOptions(config));
+        const response = await fetch(detailUrl, {
+          redirect: "follow",
+          headers: {
+            "user-agent": config.userAgent,
+            accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
+          },
+        });
 
         if (!response.ok) {
           await appendReject(config, {

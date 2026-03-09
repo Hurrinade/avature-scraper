@@ -1,7 +1,6 @@
 import { extractJobLinksFromPage } from "../extractors/listing.ts";
 import type { HostProfile, JobUrlRecord } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
-import { fetchWithRetry } from "../utils/fetchWithRetry.ts";
 import { appendJsonl } from "../utils/jsonl.ts";
 import {
   canonicalDetailUrl,
@@ -16,7 +15,6 @@ import {
 } from "./generate-listings.ts";
 import {
   appendReject,
-  fetchOptions,
   nowIso,
   type RuntimeConfig,
 } from "./runtime.ts";
@@ -107,7 +105,14 @@ async function crawlListingTemplate(
     );
 
     try {
-      const response = await fetchWithRetry(pageUrl, fetchOptions(config));
+      const response = await fetch(pageUrl, {
+        redirect: "follow",
+        headers: {
+          "user-agent": config.userAgent,
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
+        },
+      });
 
       if (!response.ok) {
         if (pageIndex === 0) {

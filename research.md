@@ -32,3 +32,4 @@ https://a2milkkf.avature.net/careers/JobDetail/{job_name}/{job_id}
 I first go with profiling and seeding:
 
 - filtering unreachable hosts so I don't even bother with urls in the later stage
+- I need to make parallel readings of the urls file because it is to slow to sequential, basically seeding and profiling is data cleanup needed to be done before anything more advanced gets executed on those urls as I need to retrieve data for jobs

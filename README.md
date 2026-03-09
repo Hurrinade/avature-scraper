@@ -15,6 +15,10 @@ bun run profile
 bun run index.ts --profile-source-mode=seeded
 bun run index.ts --profile-source-mode=generate
 GENERATE_OFFSET_STEP=6 bun run index.ts --profile-source-mode=generate
+
+# Speed knobs for large seed sets
+SEED_PROBE_CONCURRENCY=16 SEED_PROBE_TIMEOUT_MS=4000 SEED_PROBE_RETRIES=0 bun run profile
+PROFILE_CANDIDATE_CONCURRENCY=8 bun run profile
 ```
 
 ## Output Artifacts

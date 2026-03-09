@@ -12,6 +12,8 @@ import type {
 import { fileExists, readJsonFile } from "../utils/fs.ts";
 import { readJsonl } from "../utils/jsonl.ts";
 
+const alwaysReachableSeedProbe = async () => true;
+
 function buildMockFetch(requestLog: string[]): typeof fetch {
   return (async (input: string | URL | Request): Promise<Response> => {
     const raw =
@@ -121,6 +123,95 @@ function buildMockFetch(requestLog: string[]): typeof fetch {
     }
 
     return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+}
+
+function buildFastProbeMockFetch(
+  requestLog: string[],
+  options: {
+    hostCount: number;
+    downHosts?: string[];
+  },
+): typeof fetch {
+  const downHosts = new Set(options.downHosts ?? []);
+
+  return (async (input: string | URL | Request): Promise<Response> => {
+    const raw =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    const url = new URL(raw);
+    requestLog.push(url.toString());
+
+    const host = url.hostname;
+    const hostMatch = /^h(\d+)\.example$/.exec(host);
+    if (!hostMatch) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const hostIndex = Number(hostMatch[1]);
+    if (!Number.isFinite(hostIndex) || hostIndex < 1 || hostIndex > options.hostCount) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (downHosts.has(host)) {
+      throw new Error("network down");
+    }
+
+    if (url.pathname === "/careers") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <a href="/careers/SearchJobs?jobOffset=0&jobRecordsPerPage=12&listFilterMode=1">Search</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/SearchJobs") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <a href="/careers/JobDetail/H${hostIndex}/1">Role</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === `/careers/JobDetail/H${hostIndex}/1`) {
+      return new Response(
+        `
+          <html>
+            <body>
+              <h1>Host ${hostIndex} Role</h1>
+              <div id="job-description"><p>Role for host ${hostIndex}</p></div>
+              <a href="/apply/${hostIndex}">Apply</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    return new Response("Not found", { status: 404 });
   }) as typeof fetch;
 }
 
@@ -421,6 +512,7 @@ describe("split pipeline integration", () => {
         maxRetries: 0,
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
+        seedProbeFn: async (host) => host !== "z.example",
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -451,7 +543,7 @@ describe("split pipeline integration", () => {
     const zRequests = requests.filter((request) =>
       request.startsWith("https://z.example/"),
     );
-    expect(zRequests).toEqual(["https://z.example/careers"]);
+    expect(zRequests).toEqual([]);
   });
 
   test("runScraper defaults to seeded mode and default host_profiles path", async () => {
@@ -468,6 +560,7 @@ describe("split pipeline integration", () => {
         maxRetries: 0,
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
+        seedProbeFn: async (host) => host !== "z.example",
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -527,6 +620,7 @@ describe("split pipeline integration", () => {
         maxRetries: 0,
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
+        seedProbeFn: alwaysReachableSeedProbe,
       });
       await runProfileBuilder({
         inputUrlsFile: generatedFixture.inputPath,
@@ -535,6 +629,7 @@ describe("split pipeline integration", () => {
         maxRetries: 0,
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
+        seedProbeFn: alwaysReachableSeedProbe,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -607,6 +702,7 @@ describe("split pipeline integration", () => {
         maxRetries: 0,
         retryBaseDelayMs: 1,
         profileConcurrency: 2,
+        seedProbeFn: alwaysReachableSeedProbe,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -635,5 +731,71 @@ describe("split pipeline integration", () => {
     expect(requests.some((url) => url.includes("jobOffset=12"))).toBeTrue();
     expect(requests.some((url) => url.includes("jobOffset=18"))).toBeTrue();
     expect(requests.some((url) => url.includes("jobOffset=24"))).toBeFalse();
+  });
+
+  test("runProfileBuilder scales host probing without duplicate probe requests", async () => {
+    const hostCount = 10;
+    const downHosts = ["h9.example", "h10.example"];
+    const fixture = await createFixture(
+      Array.from({ length: hostCount }, (_, index) => {
+        const n = index + 1;
+        return [
+          `https://h${n}.example/careers`,
+          `https://h${n}.example/careers/SearchJobs?jobOffset=0&jobRecordsPerPage=12&listFilterMode=1`,
+          `https://h${n}.example/careers/JobDetail/H${n}/1`,
+        ];
+      }).flat(),
+    );
+
+    const originalFetch = globalThis.fetch;
+    const requests: string[] = [];
+    globalThis.fetch = buildFastProbeMockFetch(requests, {
+      hostCount,
+      downHosts,
+    });
+
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        seedProbeConcurrency: 16,
+        seedProbeTimeoutMs: 200,
+        seedProbeRetries: 0,
+        profileConcurrency: 8,
+        profileCandidateConcurrency: 8,
+        seedProbeFn: async (host) => !downHosts.includes(host),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const profiles = await readJsonFile<HostProfile[]>(fixture.hostProfilesFile);
+    expect(profiles).toHaveLength(8);
+    expect(profiles.every((profile) => profile.reachability === "reachable")).toBeTrue();
+
+    for (let n = 1; n <= hostCount; n += 1) {
+      const host = `h${n}.example`;
+      const hostCareersRequests = requests.filter((request) => {
+        const parsed = new URL(request);
+        return parsed.hostname === host && parsed.pathname === "/careers";
+      });
+
+      if (downHosts.includes(host)) {
+        expect(hostCareersRequests).toHaveLength(0);
+      } else {
+        // Reachable hosts are hit once during candidate profiling.
+        expect(hostCareersRequests).toHaveLength(1);
+      }
+    }
+
+    for (const downHost of downHosts) {
+      const hostRequests = requests.filter((request) =>
+        request.startsWith(`https://${downHost}/`),
+      );
+      expect(hostRequests).toEqual([]);
+    }
   });
 });

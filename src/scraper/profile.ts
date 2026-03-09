@@ -1,6 +1,5 @@
 import type { HostProfile, SeedHost } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
-import { fetchWithRetry } from "../utils/fetchWithRetry.ts";
 import {
   canonicalDetailUrl,
   isLikelyJobDetailUrl,
@@ -8,7 +7,6 @@ import {
 } from "../utils/url.ts";
 import {
   appendReject,
-  fetchOptions,
   nowIso,
   type RuntimeConfig,
 } from "./runtime.ts";
@@ -27,50 +25,59 @@ async function profileHost(
   let unreachableCandidateCount = 0;
   let blockedResponses = 0;
 
-  for (const candidate of candidates) {
-    try {
-      const response = await fetchWithRetry(candidate, fetchOptions(config));
+  await mapWithConcurrency(
+    candidates,
+    config.profileCandidateConcurrency,
+    async (candidate) => {
+      try {
+        const response = await fetch(candidate, {
+          redirect: "follow",
+          headers: {
+            "user-agent": config.userAgent,
+            accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
+          },
+        });
 
-      if (response.status === 403 || response.status === 429) {
-        blockedResponses += 1;
-      }
+        if (response.status === 403 || response.status === 429) {
+          blockedResponses += 1;
+        }
 
-      if (!response.ok) {
+        if (!response.ok) {
+          unreachableCandidateCount += 1;
+          await appendReject(config, {
+            stage: "profile",
+            host: seedHost.host,
+            url: candidate,
+            reason: "unreachable_candidate",
+            httpStatus: response.status,
+          });
+          return;
+        }
+
+        reachableCandidateCount += 1;
+
+        if (isLikelyListingUrl(candidate)) {
+          reachableListings.add(candidate);
+        }
+
+        if (isLikelyJobDetailUrl(candidate)) {
+          const canonical = canonicalDetailUrl(candidate);
+          if (canonical) {
+            reachableSeedDetails.add(canonical);
+          }
+        }
+      } catch {
         unreachableCandidateCount += 1;
         await appendReject(config, {
           stage: "profile",
           host: seedHost.host,
           url: candidate,
-          reason: "unreachable_candidate",
-          httpStatus: response.status,
+          reason: "fetch_failed",
         });
-        continue;
       }
-
-      reachableCandidateCount += 1;
-
-      // Check if candidate is a listing url
-      if (isLikelyListingUrl(candidate)) {
-        reachableListings.add(candidate);
-      }
-
-      // Check if candidate is a job detail url
-      if (isLikelyJobDetailUrl(candidate)) {
-        const canonical = canonicalDetailUrl(candidate);
-        if (canonical) {
-          reachableSeedDetails.add(canonical);
-        }
-      }
-    } catch {
-      unreachableCandidateCount += 1;
-      await appendReject(config, {
-        stage: "profile",
-        host: seedHost.host,
-        url: candidate,
-        reason: "fetch_failed",
-      });
-    }
-  }
+    },
+  );
 
   const hasReachable =
     reachableListings.size > 0 || reachableSeedDetails.size > 0;

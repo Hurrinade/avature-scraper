@@ -1,9 +1,9 @@
 import path from "node:path";
 import { rm } from "node:fs/promises";
 import type {
+  RunOptions,
   ProfileSourceMode,
   RejectedUrlRecord,
-  RunOptions,
 } from "../types/index.ts";
 import { ensureDir } from "../utils/fs.ts";
 import { appendJsonl, resetJsonl } from "../utils/jsonl.ts";
@@ -23,8 +23,17 @@ export interface RuntimeConfig {
   maxRetries: number;
   retryBaseDelayMs: number;
   profileConcurrency: number;
+  profileCandidateConcurrency: number;
   discoveryConcurrency: number;
   detailConcurrency: number;
+  seedProbeConcurrency: number;
+  seedProbeTimeoutMs: number;
+  seedProbeRetries: number;
+  seedProbeFn?: (
+    host: string,
+    port: number,
+    timeoutMs: number,
+  ) => Promise<boolean>;
   generateMaxPages: number;
   generateMaxTemplates: number;
   generateEmptyPageStreak: number;
@@ -107,6 +116,10 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       options.profileConcurrency,
       envPositiveInt("PROFILE_CONCURRENCY", 8),
     ),
+    profileCandidateConcurrency: toPositiveInt(
+      options.profileCandidateConcurrency,
+      envPositiveInt("PROFILE_CANDIDATE_CONCURRENCY", 8),
+    ),
     discoveryConcurrency: toPositiveInt(
       options.discoveryConcurrency,
       envPositiveInt("DISCOVERY_CONCURRENCY", 6),
@@ -115,6 +128,19 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       options.detailConcurrency,
       envPositiveInt("DETAIL_CONCURRENCY", 8),
     ),
+    seedProbeConcurrency: toPositiveInt(
+      options.seedProbeConcurrency,
+      envPositiveInt("SEED_PROBE_CONCURRENCY", 16),
+    ),
+    seedProbeTimeoutMs: toPositiveInt(
+      options.seedProbeTimeoutMs,
+      envPositiveInt("SEED_PROBE_TIMEOUT_MS", 4000),
+    ),
+    seedProbeRetries: envNonNegativeInt(
+      "SEED_PROBE_RETRIES",
+      options.seedProbeRetries ?? 0,
+    ),
+    seedProbeFn: options.seedProbeFn,
     generateMaxPages: toPositiveInt(
       options.generateMaxPages,
       envPositiveInt("GENERATE_MAX_PAGES", 250),
@@ -135,15 +161,6 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       options.userAgent ??
       process.env.SCRAPER_USER_AGENT ??
       "Mozilla/5.0 (compatible; avature-scraper/2.0; +https://example.com/bot)",
-  };
-}
-
-export function fetchOptions(config: RuntimeConfig) {
-  return {
-    timeoutMs: config.requestTimeoutMs,
-    retries: config.maxRetries,
-    baseDelayMs: config.retryBaseDelayMs,
-    userAgent: config.userAgent,
   };
 }
 

@@ -73,8 +73,17 @@ export interface RunOptions {
   maxRetries?: number;
   retryBaseDelayMs?: number;
   profileConcurrency?: number;
+  profileCandidateConcurrency?: number;
   discoveryConcurrency?: number;
   detailConcurrency?: number;
+  seedProbeConcurrency?: number;
+  seedProbeTimeoutMs?: number;
+  seedProbeRetries?: number;
+  seedProbeFn?: (
+    host: string,
+    port: number,
+    timeoutMs: number,
+  ) => Promise<boolean>;
   generateMaxPages?: number;
   generateMaxTemplates?: number;
   generateEmptyPageStreak?: number;
