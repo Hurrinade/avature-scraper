@@ -124,6 +124,258 @@ function buildMockFetch(requestLog: string[]): typeof fetch {
   }) as typeof fetch;
 }
 
+function buildPaginatedMockFetch(requestLog: string[]): typeof fetch {
+  return (async (input: string | URL | Request): Promise<Response> => {
+    const raw =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    const url = new URL(raw);
+    requestLog.push(url.toString());
+
+    if (url.hostname !== "a.example") {
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (url.pathname === "/careers") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <a href="/careers/SearchJobs?jobOffset=0&jobRecordsPerPage=12&listFilterMode=1">Search</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/SearchJobs") {
+      const offsetRaw = url.searchParams.get("jobOffset") ?? "0";
+      const offset = Number(offsetRaw);
+
+      if (Number.isFinite(offset) && offset === 12) {
+        return new Response(
+          `
+            <html>
+              <body>
+                <a href="/careers/JobDetail/Two/2">Two</a>
+                <div class="list-controls__text__legend" aria-label="24 results">
+                  13-24 of 24 results
+                </div>
+              </body>
+            </html>
+          `,
+          {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          },
+        );
+      }
+
+      if (Number.isFinite(offset) && offset >= 12) {
+        return new Response(
+          `
+            <html>
+              <body>
+                <div>No results</div>
+              </body>
+            </html>
+          `,
+          {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          },
+        );
+      }
+
+      return new Response(
+        `
+          <html>
+            <body>
+              <a href="/careers/JobDetail/One/1">One</a>
+              <div class="list-controls__text__legend" aria-label="24 results">
+                1-12 of 24 results
+              </div>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/JobDetail/One/1") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <h1>Engineer One</h1>
+              <div id="job-description"><p>Build systems one.</p></div>
+              <a href="/apply/1">Apply now</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/JobDetail/Two/2") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <h1>Engineer Two</h1>
+              <div id="job-description"><p>Build systems two.</p></div>
+              <a href="/apply/2">Apply now</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+}
+
+function buildPaginatedNoLegendMockFetch(requestLog: string[]): typeof fetch {
+  return (async (input: string | URL | Request): Promise<Response> => {
+    const raw =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+
+    const url = new URL(raw);
+    requestLog.push(url.toString());
+
+    if (url.hostname !== "a.example") {
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (url.pathname === "/careers") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <a href="/careers/SearchJobs?jobOffset=0&jobRecordsPerPage=12&listFilterMode=1">Search</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/SearchJobs") {
+      const offsetRaw = url.searchParams.get("jobOffset") ?? "0";
+      const offset = Number(offsetRaw);
+
+      if (Number.isFinite(offset) && offset === 6) {
+        return new Response(
+          `
+            <html>
+              <body>
+                <a href="/careers/JobDetail/Two/2">Two</a>
+              </body>
+            </html>
+          `,
+          {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          },
+        );
+      }
+
+      if (Number.isFinite(offset) && offset >= 12) {
+        return new Response(
+          `
+            <html>
+              <body>
+                <div>No results</div>
+              </body>
+            </html>
+          `,
+          {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          },
+        );
+      }
+
+      return new Response(
+        `
+          <html>
+            <body>
+              <a href="/careers/JobDetail/One/1">One</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/JobDetail/One/1") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <h1>Engineer One</h1>
+              <div id="job-description"><p>Build systems one.</p></div>
+              <a href="/apply/1">Apply now</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/JobDetail/Two/2") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <h1>Engineer Two</h1>
+              <div id="job-description"><p>Build systems two.</p></div>
+              <a href="/apply/2">Apply now</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    return new Response("not found", { status: 404 });
+  }) as typeof fetch;
+}
+
 async function createFixture(inputLines?: string[]) {
   const fixtureDir = await mkdtemp(path.join(tmpdir(), "avature-scraper-"));
   const inputPath = path.join(fixtureDir, "Urls.txt");
@@ -136,6 +388,8 @@ async function createFixture(inputLines?: string[]) {
     "https://a.example/careers/Login",
     "https://a.example/careers/Error",
     "https://z.example/careers",
+    "https://z.example/careers/SearchJobs?jobOffset=0&jobRecordsPerPage=12",
+    "https://z.example/careers/JobDetail/Down/999",
     "http://[invalid",
   ];
 
@@ -152,7 +406,7 @@ async function createFixture(inputLines?: string[]) {
 }
 
 describe("split pipeline integration", () => {
-  test("runProfileBuilder creates host_profiles.json with aggregated urls field", async () => {
+  test("runProfileBuilder filters unreachable hosts during seed collection", async () => {
     const fixture = await createFixture();
 
     const originalFetch = globalThis.fetch;
@@ -173,28 +427,31 @@ describe("split pipeline integration", () => {
     }
 
     const profiles = await readJsonFile<HostProfile[]>(fixture.hostProfilesFile);
-    expect(profiles).toHaveLength(2);
+    expect(profiles).toHaveLength(1);
 
     const aProfile = profiles.find((profile) => profile.host === "a.example");
     expect(aProfile?.reachability).toBe("reachable");
     expect(aProfile?.candidateCount).toBe(4);
-    expect(aProfile?.urls).toEqual([
-      { url: "/careers/", queryParams: [] },
-      { url: "/careers/JobDetail/", queryParams: ["jobId"] },
-      {
-        url: "/careers/SearchJobs/",
-        queryParams: ["jobOffset", "jobRecordsPerPage", "listFilterMode"],
-      },
+    expect([...(aProfile?.reachableListingUrls ?? [])].sort()).toEqual([
+      "https://a.example/careers",
+      "https://a.example/careers/SearchJobs/feed?jobRecordsPerPage=6",
+      "https://a.example/careers/SearchJobs?jobOffset=0&jobRecordsPerPage=12&listFilterMode=1",
+    ].sort());
+    expect(aProfile?.reachableSeedDetailUrls).toEqual([
+      "https://a.example/careers/JobDetail/Seeded/9?jobId=SEED-9",
     ]);
 
     const zProfile = profiles.find((profile) => profile.host === "z.example");
-    expect(zProfile?.reachability).toBe("unreachable");
-    expect(zProfile?.urls).toEqual([]);
+    expect(zProfile).toBeUndefined();
 
     expect(fileExists(fixture.rejectedPath)).toBeFalse();
     expect(fileExists(fixture.jobUrlsPath)).toBeFalse();
     expect(fileExists(fixture.jobsPath)).toBeFalse();
-    expect(requests.includes("https://z.example/careers")).toBeTrue();
+
+    const zRequests = requests.filter((request) =>
+      request.startsWith("https://z.example/"),
+    );
+    expect(zRequests).toEqual(["https://z.example/careers"]);
   });
 
   test("runScraper defaults to seeded mode and default host_profiles path", async () => {
@@ -226,6 +483,7 @@ describe("split pipeline integration", () => {
         retryBaseDelayMs: 1,
         discoveryConcurrency: 2,
         detailConcurrency: 2,
+        writeRejects: true,
       });
     } finally {
       globalThis.fetch = originalFetch;
@@ -251,11 +509,96 @@ describe("split pipeline integration", () => {
     expect(scraperRequests.includes("https://z.example/careers")).toBeFalse();
   });
 
-  test("runScraper generate mode is explicit TODO and does not start fetching", async () => {
-    const fixture = await createFixture();
+  test("runScraper generate mode uses legend totals to stop pagination early", async () => {
+    const seededFixture = await createFixture([
+      "https://a.example/careers/SearchJobs?jobRecordsPerPage=12&listFilterMode=1",
+    ]);
+    const generatedFixture = await createFixture([
+      "https://a.example/careers/SearchJobs?jobRecordsPerPage=12&listFilterMode=1",
+    ]);
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = buildMockFetch([]);
+    globalThis.fetch = buildPaginatedMockFetch([]);
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: seededFixture.inputPath,
+        outputDir: seededFixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+      });
+      await runProfileBuilder({
+        inputUrlsFile: generatedFixture.inputPath,
+        outputDir: generatedFixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const seededRequests: string[] = [];
+    const generatedRequests: string[] = [];
+    try {
+      globalThis.fetch = buildPaginatedMockFetch(seededRequests);
+      await runScraper({
+        outputDir: seededFixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        discoveryConcurrency: 2,
+        detailConcurrency: 2,
+        profileSourceMode: "seeded",
+      });
+
+      globalThis.fetch = buildPaginatedMockFetch(generatedRequests);
+      await runScraper({
+        outputDir: generatedFixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        discoveryConcurrency: 2,
+        detailConcurrency: 2,
+        profileSourceMode: "generate",
+        generateMaxPages: 8,
+        generateMaxTemplates: 4,
+        generateEmptyPageStreak: 2,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const seededJobUrls = await readJsonl<JobUrlRecord>(seededFixture.jobUrlsPath);
+    const generatedJobUrls = await readJsonl<JobUrlRecord>(generatedFixture.jobUrlsPath);
+    const generatedUrls = generatedJobUrls.map((record) => record.canonicalJobDetailUrl);
+
+    expect(seededJobUrls).toHaveLength(1);
+    expect(generatedJobUrls.length).toBeGreaterThan(seededJobUrls.length);
+    expect(generatedUrls).toContain("https://a.example/careers/JobDetail/Two/2");
+    expect(
+      generatedRequests.some((url) => url.includes("jobOffset=6")),
+    ).toBeFalse();
+    expect(
+      generatedRequests.some((url) => url.includes("jobOffset=12")),
+    ).toBeTrue();
+    expect(
+      generatedRequests.some((url) => url.includes("jobOffset=18")),
+    ).toBeFalse();
+    expect(
+      generatedRequests.some((url) => url.includes("jobOffset=24")),
+    ).toBeFalse();
+  });
+
+  test("runScraper generate mode falls back to fixed offset when legend is missing", async () => {
+    const fixture = await createFixture([
+      "https://a.example/careers/SearchJobs?jobRecordsPerPage=12&listFilterMode=1",
+    ]);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = buildPaginatedNoLegendMockFetch([]);
     try {
       await runProfileBuilder({
         inputUrlsFile: fixture.inputPath,
@@ -269,23 +612,28 @@ describe("split pipeline integration", () => {
       globalThis.fetch = originalFetch;
     }
 
-    const scraperRequests: string[] = [];
-    globalThis.fetch = buildMockFetch(scraperRequests);
+    const requests: string[] = [];
+    globalThis.fetch = buildPaginatedNoLegendMockFetch(requests);
     try {
-      await expect(
-        runScraper({
-          outputDir: fixture.outputDir,
-          hostProfilesFile: fixture.hostProfilesFile,
-          profileSourceMode: "generate",
-        }),
-      ).rejects.toThrow(/TODO_NOT_IMPLEMENTED/);
+      await runScraper({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        discoveryConcurrency: 2,
+        detailConcurrency: 2,
+        profileSourceMode: "generate",
+        generateMaxPages: 8,
+        generateMaxTemplates: 4,
+        generateEmptyPageStreak: 2,
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
 
-    expect(scraperRequests).toHaveLength(0);
-    expect(fileExists(fixture.jobUrlsPath)).toBeFalse();
-    expect(fileExists(fixture.rejectedPath)).toBeFalse();
-    expect(fileExists(fixture.jobsPath)).toBeFalse();
+    expect(requests.some((url) => url.includes("jobOffset=6"))).toBeTrue();
+    expect(requests.some((url) => url.includes("jobOffset=12"))).toBeTrue();
+    expect(requests.some((url) => url.includes("jobOffset=18"))).toBeTrue();
+    expect(requests.some((url) => url.includes("jobOffset=24"))).toBeFalse();
   });
 });

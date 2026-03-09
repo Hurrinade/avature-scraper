@@ -75,5 +75,9 @@ export interface RunOptions {
   profileConcurrency?: number;
   discoveryConcurrency?: number;
   detailConcurrency?: number;
+  generateMaxPages?: number;
+  generateMaxTemplates?: number;
+  generateEmptyPageStreak?: number;
+  generateOffsetStep?: number;
   userAgent?: string;
 }

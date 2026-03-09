@@ -11,6 +11,12 @@ export interface ListingExtraction {
   jobDetailUrls: string[];
   queryParamHints: string[];
   rejectedCandidates: string[];
+  paginationLegend?: {
+    rangeStart: number;
+    rangeEnd: number;
+    totalResults: number;
+    pageSize: number;
+  };
 }
 
 function unique(values: string[]): string[] {
@@ -29,7 +35,8 @@ function collectStringsFromJson(value: unknown, output: string[]): void {
   }
 
   if (value && typeof value === "object") {
-    for (const entry of Object.values(value)) collectStringsFromJson(entry, output);
+    for (const entry of Object.values(value))
+      collectStringsFromJson(entry, output);
   }
 }
 
@@ -43,7 +50,10 @@ function extractScriptCandidates($: ReturnType<typeof load>): string[] {
     const directUrls = content.match(/https?:\/\/[^\s"'<>\\]+/g) ?? [];
     values.push(...directUrls);
 
-    const careersPaths = content.match(/\/(?:[A-Za-z0-9_\-.]+\/)*(?:careers|jobs)\/[A-Za-z0-9_\-./?=&%]+/g) ?? [];
+    const careersPaths =
+      content.match(
+        /\/(?:[A-Za-z0-9_\-.]+\/)*(?:careers|jobs)\/[A-Za-z0-9_\-./?=&%]+/g,
+      ) ?? [];
     values.push(...careersPaths);
 
     try {
@@ -63,6 +73,54 @@ function normalizeCandidate(candidate: string, baseUrl: string): string | null {
   return parsed.toString();
 }
 
+function parsePositiveInt(raw: string | undefined | null): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.floor(parsed);
+}
+
+function normalizeInlineWhitespace(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Extracts the pagination legend from the page.
+ * @param $ - The Cheerio instance.
+ * @returns The pagination legend.
+ */
+function extractPaginationLegend(
+  $: ReturnType<typeof load>,
+): ListingExtraction["paginationLegend"] {
+  const legend = $(".list-controls__text__legend").first();
+  if (!legend.length) return undefined;
+
+  const text = normalizeInlineWhitespace(legend.text());
+  const textMatch = /(\d+)\s*-\s*(\d+)\s*of\s*(\d+)/i.exec(text);
+  if (!textMatch) return undefined;
+
+  const rangeStart = parsePositiveInt(textMatch[1]);
+  const rangeEnd = parsePositiveInt(textMatch[2]);
+  const totalFromText = parsePositiveInt(textMatch[3]);
+  if (!rangeStart || !rangeEnd || !totalFromText || rangeEnd < rangeStart) {
+    return undefined;
+  }
+
+  const aria = normalizeInlineWhitespace(legend.attr("aria-label") ?? "");
+  const ariaMatch = /(\d+)\s+results?/i.exec(aria);
+  const totalFromAria = parsePositiveInt(ariaMatch?.[1]);
+  const totalResults = totalFromAria ?? totalFromText;
+  const pageSize = rangeEnd - rangeStart + 1;
+  if (pageSize <= 0) return undefined;
+
+  return {
+    rangeStart,
+    rangeEnd,
+    totalResults,
+    pageSize,
+  };
+}
+
 export function extractJobLinksFromPage(
   baseUrl: string,
   body: string,
@@ -74,6 +132,7 @@ export function extractJobLinksFromPage(
   if (/listfiltermode/i.test(body)) queryParamHints.add("listFilterMode");
 
   const candidates: string[] = [];
+  let paginationLegend: ListingExtraction["paginationLegend"];
   const normalizedType = (contentType ?? "").toLowerCase();
 
   if (normalizedType.includes("application/json")) {
@@ -85,6 +144,7 @@ export function extractJobLinksFromPage(
     }
   } else {
     const $ = load(body);
+    paginationLegend = extractPaginationLegend($);
 
     $("a[href]").each((_, element) => {
       const href = $(element).attr("href");
@@ -141,5 +201,6 @@ export function extractJobLinksFromPage(
     jobDetailUrls: unique(details),
     queryParamHints: unique(Array.from(queryParamHints)),
     rejectedCandidates: unique(rejected),
+    paginationLegend,
   };
 }

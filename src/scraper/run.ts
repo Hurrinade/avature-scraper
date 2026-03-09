@@ -166,12 +166,7 @@ export async function runScraper(options: RunOptions = {}): Promise<void> {
   console.log(
     `[profiles] loaded ${scopedProfiles.length} host profiles from ${config.hostProfilesFile}`,
   );
-
-  if (config.profileSourceMode === "generate") {
-    throw new Error(
-      "TODO_NOT_IMPLEMENTED: profile-source-mode=generate is not implemented yet.",
-    );
-  }
+  console.log(`[profiles] source mode: ${config.profileSourceMode}`);
 
   await resetExtractionOutputFiles(config);
 

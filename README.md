@@ -6,14 +6,15 @@ Minimal Bun + TypeScript scraper that follows `my-plan.md`.
 
 1. Run standalone profiling to generate host profiles from `Urls.txt`.
 2. Run scraper with host profiles in `seeded` mode to discover/fetch details.
-3. (Future) Run scraper with `generate` mode to synthesize new listing URLs from profile query patterns.
+3. Run scraper with `generate` mode to crawl seeded + synthesized listing templates with pagination.
 
 ## Usage
 
 ```bash
 bun run profile
 bun run index.ts --profile-source-mode=seeded
-bun run index.ts --profile-source-mode=generate # TODO_NOT_IMPLEMENTED
+bun run index.ts --profile-source-mode=generate
+GENERATE_OFFSET_STEP=6 bun run index.ts --profile-source-mode=generate
 ```
 
 ## Output Artifacts

@@ -1,4 +1,5 @@
 import type { SeedHost } from "../types/index.ts";
+import { fetchWithRetry } from "../utils/fetchWithRetry.ts";
 import { readLines } from "../utils/fs.ts";
 import {
   canonicalDetailUrl,
@@ -7,11 +8,35 @@ import {
   hasBlockedPath,
   isLikelyJobDetailUrl,
 } from "../utils/url.ts";
-import { appendReject, type RuntimeConfig } from "./runtime.ts";
+import {
+  appendReject,
+  fetchOptions,
+  type RuntimeConfig,
+} from "./runtime.ts";
 
 interface SeedAccumulator {
   candidateUrls: Set<string>;
   seededDetailUrls: Set<string>;
+}
+
+type HostProbeState = "reachable" | "unreachable";
+
+async function probeHostReachability(
+  config: RuntimeConfig,
+  host: string,
+): Promise<{ state: HostProbeState; httpStatus?: number }> {
+  const probeUrl = `https://${host}/careers`;
+
+  try {
+    const response = await fetchWithRetry(probeUrl, fetchOptions(config));
+    if (!response.ok) {
+      return { state: "unreachable", httpStatus: response.status };
+    }
+
+    return { state: "reachable" };
+  } catch {
+    return { state: "unreachable" };
+  }
 }
 
 // Stage 1: read raw seed URLs and produce clean host buckets.
@@ -19,6 +44,7 @@ export async function collectSeedHosts(
   config: RuntimeConfig,
 ): Promise<SeedHost[]> {
   const hosts = new Map<string, SeedAccumulator>();
+  const hostProbeMemo = new Map<string, HostProbeState>();
 
   for await (const { line } of readLines(config.inputUrlsFile)) {
     const raw = line.trim();
@@ -51,6 +77,33 @@ export async function collectSeedHosts(
         stage: "seeds",
         url: canonical,
         reason: "missing_host",
+      });
+      continue;
+    }
+
+    let hostState = hostProbeMemo.get(host);
+    if (!hostState) {
+      const probe = await probeHostReachability(config, host);
+      hostState = probe.state;
+      hostProbeMemo.set(host, hostState);
+
+      if (hostState === "unreachable") {
+        await appendReject(config, {
+          stage: "seeds",
+          host,
+          url: `https://${host}/careers`,
+          reason: "host_unreachable_probe",
+          httpStatus: probe.httpStatus,
+        });
+      }
+    }
+
+    if (hostState === "unreachable") {
+      await appendReject(config, {
+        stage: "seeds",
+        host,
+        url: canonical,
+        reason: "skipped_unreachable_host",
       });
       continue;
     }

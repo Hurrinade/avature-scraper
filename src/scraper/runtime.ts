@@ -25,6 +25,10 @@ export interface RuntimeConfig {
   profileConcurrency: number;
   discoveryConcurrency: number;
   detailConcurrency: number;
+  generateMaxPages: number;
+  generateMaxTemplates: number;
+  generateEmptyPageStreak: number;
+  generateOffsetStep: number;
   userAgent: string;
 }
 
@@ -84,7 +88,7 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       path.join(outputDir, "host_profiles.json"),
     ),
     profileSourceMode: options.profileSourceMode ?? "seeded",
-    writeRejects: options.writeRejects ?? true,
+    writeRejects: options.writeRejects ?? false,
     jobUrlsPath: path.resolve(outputDir, "job_urls.jsonl"),
     rejectedUrlsPath: path.resolve(outputDir, "rejected_urls.jsonl"),
     jobsPath: path.resolve(outputDir, "jobs.json"),
@@ -110,6 +114,22 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
     detailConcurrency: toPositiveInt(
       options.detailConcurrency,
       envPositiveInt("DETAIL_CONCURRENCY", 8),
+    ),
+    generateMaxPages: toPositiveInt(
+      options.generateMaxPages,
+      envPositiveInt("GENERATE_MAX_PAGES", 250),
+    ),
+    generateMaxTemplates: toPositiveInt(
+      options.generateMaxTemplates,
+      envPositiveInt("GENERATE_MAX_TEMPLATES", 60),
+    ),
+    generateEmptyPageStreak: toPositiveInt(
+      options.generateEmptyPageStreak,
+      envPositiveInt("GENERATE_EMPTY_PAGE_STREAK", 3),
+    ),
+    generateOffsetStep: toPositiveInt(
+      options.generateOffsetStep,
+      envPositiveInt("GENERATE_OFFSET_STEP", 6),
     ),
     userAgent:
       options.userAgent ??

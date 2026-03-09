@@ -13,9 +13,14 @@ describe("listing extraction", () => {
             window.__INITIAL_STATE__ = {
               "jobs": [
                 {"url": "/careers/JobDetail/Two/2?source=linkedin"}
-              ]
+              ],
+              "jobOffset": 0,
+              "jobRecordsPerPage": 12
             }
           </script>
+          <div class="list-controls__text__legend" aria-label="24 results">
+            1-12 of 24 results
+          </div>
         </body>
       </html>
     `;
@@ -34,5 +39,9 @@ describe("listing extraction", () => {
     expect(
       extraction.rejectedCandidates.some((url) => url.includes("/Login")),
     ).toBeTrue();
+    expect(extraction.queryParamHints).toContain("jobOffset");
+    expect(extraction.queryParamHints).toContain("jobRecordsPerPage");
+    expect(extraction.paginationLegend?.pageSize).toBe(12);
+    expect(extraction.paginationLegend?.totalResults).toBe(24);
   });
 });
