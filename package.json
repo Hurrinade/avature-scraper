@@ -9,7 +9,6 @@
     "inventory": "bun run index.ts inventory",
     "details": "bun run index.ts details",
     "normalize": "bun run index.ts normalize",
-    "resume": "bun run index.ts resume",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
   },

@@ -6,7 +6,6 @@ const VALID_MODES: PipelineMode[] = [
   "details",
   "normalize",
   "all",
-  "resume",
 ];
 
 function parseNumber(value: string | undefined): number | undefined {
@@ -22,16 +21,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
     ? (positional as PipelineMode)
     : "all";
 
-  let resume = mode === "resume";
   let limitHosts: number | undefined;
   let limitJobs: number | undefined;
 
   for (const arg of argv.slice(2)) {
     if (!arg.startsWith("--")) continue;
-    if (arg === "--resume") {
-      resume = true;
-      continue;
-    }
 
     if (arg.startsWith("--limit-hosts=")) {
       limitHosts = parseNumber(arg.split("=")[1]);
@@ -46,7 +40,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   return {
     mode,
-    resume,
     limitHosts,
     limitJobs,
   };
@@ -63,10 +56,8 @@ Modes:
   details      Run seeds + profile + inventory + job details
   normalize    Run full pipeline through normalization
   all          Run full pipeline (default)
-  resume       Resume full pipeline from checkpoint
 
 Options:
-  --resume
   --limit-hosts=<n>
   --limit-jobs=<n>
 `);
