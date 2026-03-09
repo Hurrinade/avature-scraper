@@ -4,22 +4,21 @@ Minimal Bun + TypeScript scraper that follows `my-plan.md`.
 
 ## Flow
 
-1. Read `Urls.txt`, normalize/group by host, reject `/login` and `/error` URLs.
-2. Profile host reachability using seed URLs + fallback listing paths.
-3. Discover job detail URLs from reachable listing/search pages.
-4. Fetch detail pages and extract job title, descriptions, application URL, and metadata.
-5. Dedupe and write final output.
+1. Run standalone profiling to generate host profiles from `Urls.txt`.
+2. Run scraper with host profiles in `seeded` mode to discover/fetch details.
+3. (Future) Run scraper with `generate` mode to synthesize new listing URLs from profile query patterns.
 
 ## Usage
 
 ```bash
-bun run index.ts
-bun run index.ts --limit-hosts=50 --limit-jobs=500
+bun run profile
+bun run index.ts --profile-source-mode=seeded
+bun run index.ts --profile-source-mode=generate # TODO_NOT_IMPLEMENTED
 ```
 
 ## Output Artifacts
 
-- `output/host_profiles.jsonl`
+- `output/host_profiles.json` (created by `bun run profile`)
 - `output/job_urls.jsonl`
 - `output/rejected_urls.jsonl`
 - `output/jobs.json`
