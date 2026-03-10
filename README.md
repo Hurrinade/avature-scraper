@@ -16,7 +16,7 @@ Minimal Bun + TypeScript scraper that follows `my-plan.md`.
 bun run profile
 bun run profile --fresh-run # Run with file cleanup
 
-# Then run discovery for more job details urls retrieval
+# Then run discovery for more job details urls retrieval, generate is with offset generation (slower, using also seed urls), seed is just with urls from the initial input (like urls.txt)
 # Discovery-only (overwrites output/job_urls.jsonl)
 bun run discover --profile-source-mode=seeded
 bun run discover --profile-source-mode=generate
