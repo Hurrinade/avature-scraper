@@ -17,7 +17,7 @@ More in depth file of func [here](./docs/pipeline-steps.md)
 
 # Initial discovery
 
-I added a pre-seeding discovery step using Certificate Transparency (CT) logs via `crt.sh`. This is simple example where I currently hit just one certificate host to gather some urls. More hosts can be added to improve reachability. I am also doing filtering for unreachable urls because there are many returned unreachable.
+I added a pre-seeding discovery step using Certificate Transparency (CT) logs via `crt.sh`. This is simple example where I currently hit just one certificate host to gather some urls. More hosts can be added to improve reachability. I am also doing filtering for unreachable urls because there are many returned unreachable. Other potential scraping of urls can be via search engine.
 
 Logic:
 
