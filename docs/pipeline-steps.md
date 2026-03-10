@@ -1,27 +1,39 @@
 # Avature Scraper Pipeline (Step by Step)
 
-This document explains what each pipeline step does and why each check is important for a clean, stable run.
+This is the current, implementation-accurate pipeline guide.
+
+It is aligned with the intent in [`my-plan.md`](../my-plan.md), but reflects the latest code behavior and CLI split.
+
+## Run Modes
+
+You can run the pipeline in independent steps:
+
+1. `bun run profile`
+2. `bun run discover --profile-source-mode=seeded|generate`
+3. `bun run details`
+
+You can also still run the combined flow:
+
+- `bun run index.ts --profile-source-mode=seeded|generate`
 
 ## Step 1: Seeding (`seeds`)
 
-Purpose: turn raw `Urls.txt` into clean host buckets before expensive scraping.
+Purpose: clean raw `Urls.txt` and prepare host buckets.
 
 Important work:
 
-- Read input URLs line-by-line (memory-safe for large files).
+- Read URLs line-by-line (memory-safe).
 - Canonicalize URLs and normalize hosts.
-- Filter hard-noise paths early (for example login/error pages).
-- Group URLs by host and remove duplicates.
-- Detect seeded job-detail URLs already present in input.
-- Probe each host reachability first (TCP probe), in parallel.
+- Filter noisy paths early (`/Login`, `/Error`, etc.).
+- Group by host and dedupe URLs.
+- Extract seeded detail URLs already present in input.
+- Probe host TCP reachability before profiling.
 
-Why this keeps it clean:
+Result:
 
-- Unreachable hosts are removed before profile/discovery work.
-- Broken or noisy URLs are rejected early.
-- Host-first gating prevents wasted requests later.
+- Unreachable hosts are dropped before profile HTTP checks.
 
-Reject examples:
+Common reject reasons:
 
 - `invalid_url`
 - `filtered_login_or_error`
@@ -30,26 +42,27 @@ Reject examples:
 
 ## Step 2: Profiling (`profile`)
 
-Purpose: validate candidate URLs per host and build reusable host profiles.
+Purpose: validate host candidate URLs and build `host_profiles.json`.
 
 Important work:
 
-- For each seeded host, test all candidate URLs concurrently.
-- Keep only reachable URLs (`2xx`) as valid candidates.
-- Classify reachable URLs into listing URLs (for discovery) and seeded detail URLs (direct job details).
-- Detect block behavior (`403`/`429`) to distinguish blocked vs unreachable hosts.
-- Use shared HTTP helper timeout (`HTTP_TIMEOUT_MS`, default `8000`) for fast-fail behavior.
-- Save per-host profile fields: reachability (`reachable`, `blocked`, `unreachable`), counters, reachable listing URLs, reachable seeded detail URLs, and check timestamp.
+- For each seeded host, test candidate URLs concurrently.
+- Classify URL reachability and host reachability (`reachable`, `blocked`, `unreachable`).
+- Split reachable candidates into listing URLs and seeded detail URLs.
+- Write host profile records used by later steps.
 
-Why this keeps it clean:
+Host-pass checkpoint behavior:
 
-- Discovery only runs on proven reachable hosts/URLs.
-- Host profile output is deterministic input for later steps.
-- Blocked hosts are tracked explicitly instead of treated as generic failures.
-- Timeout control prevents long stalls on slow endpoints.
-- If host is fully passed it will be marked as passed so future profiling is skipping that host
+- `output/host_profiles.json` is the host-pass checkpoint source.
+- If a host already exists there, it is treated as passed and skipped on later profile runs.
+- Skip key is host-only (not URL-change-based).
+- Hosts are considered passed after completed profiling even if final status is `blocked` or `unreachable`.
 
-Reject examples:
+Reset:
+
+- `bun run profile --fresh-run` clears prior profile output and reprofiles all hosts.
+
+Common reject reasons:
 
 - `unreachable_candidate`
 - `fetch_failed`
@@ -58,85 +71,82 @@ Reject examples:
 
 ## Step 3: Discovery (`discovery`)
 
-Purpose: expand from listing pages to full job-detail URL coverage.
+Purpose: collect job detail URLs from profiled listing pages.
 
 Important work:
 
-- Use only hosts marked `reachable` in host profiles.
-- Build listing templates from profiled listing URLs.
-- In `generate` mode, synthesize additional listing URLs from known patterns.
-- Crawl templates in bounded parallel per host (`DISCOVERY_TEMPLATE_CONCURRENCY`, default `3`) while keeping page order sequential inside each template.
-- Crawl listing pages and extract job-detail links from HTML/JSON/script content.
-- Canonicalize and globally dedupe discovered job-detail URLs.
-- Support pagination by changing `jobOffset` and reading pagination legend when available.
-- Stop pagination safely when page limit is reached, empty-page streak is hit, or known total results are exhausted.
-- Merge discovered detail URLs with reachable seeded detail URLs.
-- Write discovered URLs to `job_urls.jsonl` in batched append mode (same file format, fewer syscalls).
+- Load reachable hosts from `host_profiles.json`.
+- Crawl listing templates and extract detail links from HTML/JSON/script content.
+- Dedupe canonical detail URLs globally.
+- In `generate` mode, synthesize pagination templates and iterate offsets.
+- Pagination URL generation with `jobOffset` is only used for `SearchJobs` paths.
 
-Why this keeps it clean:
+Important rule:
 
-- URL generation is controlled and host-specific.
-- Pagination has stop conditions, so crawling does not run forever.
-- Canonical dedupe prevents repeated detail fetches.
-- Template-level concurrency increases throughput without changing pagination logic.
-- Batched writes reduce I/O overhead without changing output data.
+- Generated offset URLs are for `.../SearchJobs...` endpoints only.
 
-Reject examples:
+Output:
+
+- Discovery-only command (`bun run discover`) overwrites `output/job_urls.jsonl`.
+- In discovery-only mode, reachable seeded detail URLs are also included so details step can consume one file.
+
+Common reject reasons:
 
 - `listing_unreachable`
 - `listing_fetch_failed`
 - `filtered_login_or_error`
 
-## Step 4: Detail Extraction (`details`)
+## Step 4: Details Extraction (`details`)
 
-Purpose: fetch each unique job-detail URL and map page HTML into structured job data.
+Purpose: fetch each job detail URL and map HTML into normalized job objects.
 
 Important work:
 
-- Fetch detail pages concurrently.
-- Use the same shared HTTP timeout control for detail fetches.
-- Require reachable detail pages (`2xx`) and non-empty body.
-- Parse HTML and extract title, description text/html, application URL, and metadata (location, date posted, job ID when available).
-- Canonicalize job-detail URL before storing.
+- Read detail URLs from `output/job_urls.jsonl` (or `--job-urls-file`).
+- Fetch details concurrently.
+- Extract title, description text/html, application URL, metadata, canonical detail URL.
+- Merge new jobs into existing `output/jobs.json` and dedupe.
 
-Why this keeps it clean:
+Detail checkpoint behavior:
 
-- Only valid detail pages become job records.
-- Extraction logic is consistent across hosts.
-- Canonical detail URLs improve final dedupe quality.
+- Uses `output/job_detail_checkpoint.jsonl`.
+- Each attempted detail URL (success or fail) is checkpointed.
+- Later runs skip already attempted detail URLs.
 
-Reject examples:
+Reset:
+
+- `bun run details --fresh-run` clears detail checkpoint and `jobs.json`.
+
+Common reject reasons:
 
 - `detail_unreachable`
 - `detail_fetch_failed`
 
 ## Step 5: Finalization (`final`)
 
-Purpose: produce a clean final dataset.
+Purpose: produce stable deduped output.
 
-Important work:
+Dedupe priority:
 
-- Dedupe records with stable key priority: `host + jobId`, then canonical detail URL, then fallback hash (`host + title + location`).
-- Write final deduped jobs to `output/jobs.json`.
+1. `host + jobId`
+2. canonical detail URL
+3. fallback hash (`host + title + location`)
 
-Why this keeps it clean:
+Final output:
 
-- Duplicate job records are removed even when URLs differ.
-- The same pipeline run produces predictable output artifacts.
+- `output/jobs.json`
 
 ## Output Files
 
-- `output/host_profiles.json` (profile stage result)
-- `output/job_urls.jsonl` (discovered detail URLs)
-- `output/rejected_urls.jsonl` (stage-level rejections)
-- `output/jobs.json` (final deduped jobs)
+- `output/host_profiles.json`
+- `output/job_urls.jsonl`
+- `output/job_detail_checkpoint.jsonl`
+- `output/rejected_urls.jsonl`
+- `output/jobs.json`
 
-## Reliability Rules Across All Steps
+## Reliability Rules
 
 - Canonicalize URLs at every stage.
-- Filter known-noise paths early.
-- Prefer host-level gating before URL-level deep crawling.
-- Use controlled concurrency for scale without overload.
-- Use shared HTTP helper with timeout and explicit body draining/release for connection reuse.
-- Track stage-specific rejections for debugging and cleanup.
-- Keep hot-path logs minimal (stage-level progress only) to avoid unnecessary runtime overhead.
+- Keep host-level gating early (seeding/profiling).
+- Use explicit checkpoints for resumable runs.
+- Keep stage-level reject tracking for cleanup/debugging.
