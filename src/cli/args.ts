@@ -55,13 +55,21 @@ export function parseProfileArgs(argv: string[]): ProfileCliArgs {
     if (token.startsWith("--host-profiles-file=")) {
       const value = token.split("=")[1]?.trim();
       if (value) args.hostProfilesFile = value;
+      continue;
+    }
+
+    if (token.startsWith("--input-urls-file=")) {
+      const value = token.split("=")[1]?.trim();
+      if (value) args.inputUrlsFile = value;
     }
   }
 
   return args;
 }
 
-function parseProfileSourceMode(raw: string | undefined): ProfileSourceMode | undefined {
+function parseProfileSourceMode(
+  raw: string | undefined,
+): ProfileSourceMode | undefined {
   if (raw === "seeded" || raw === "generate") return raw;
   return undefined;
 }
@@ -87,6 +95,7 @@ Usage:
 
 Options:
   --limit-hosts=<n>
+  --input-urls-file=<path>
   --host-profiles-file=<path>
   -h, --help
 `);

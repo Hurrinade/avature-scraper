@@ -9,6 +9,7 @@ export interface CliArgs {
 export interface ProfileCliArgs {
   help: boolean;
   limitHosts?: number;
+  inputUrlsFile?: string;
   hostProfilesFile?: string;
 }
 
@@ -60,11 +61,24 @@ export interface JobOutput {
   scrapedAt: string;
 }
 
+export interface SearchHitRecord {
+  query: string;
+  pageIndex: number;
+  url: string;
+}
+
+export interface ValidatedHostRecord {
+  host: string;
+  listingUrls: string[];
+  jobDetailUrls: string[];
+}
+
 export interface RunOptions {
   cwd?: string;
   inputUrlsFile?: string;
   outputDir?: string;
   hostProfilesFile?: string;
+  discoveredUrlsFile?: string;
   profileSourceMode?: ProfileSourceMode;
   limitHosts?: number;
   limitJobs?: number;
@@ -84,6 +98,7 @@ export interface RunOptions {
     port: number,
     timeoutMs: number,
   ) => Promise<boolean>;
+  httpTimeoutMs?: number;
   httpRequestFn?: (
     url: string,
     userAgent: string,
@@ -97,5 +112,10 @@ export interface RunOptions {
   generateMaxTemplates?: number;
   generateEmptyPageStreak?: number;
   generateOffsetStep?: number;
+  discoverQueryLimit?: number;
+  discoverPagesPerQuery?: number;
+  discoverSearchConcurrency?: number;
+  discoverValidateConcurrency?: number;
+  discoveryTemplateConcurrency?: number;
   userAgent?: string;
 }

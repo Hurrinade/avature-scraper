@@ -1,5 +1,7 @@
 How it should be tackled:
 
+0. CAN BE DONE - Initial discovery of more urls and hosts which can be scraped, this gets stored to some file for future scraper to use
+
 1. From Urls.txt file get all hosts and urls connected to them, it would be okay if certain stuff gets filtered like, endpoints that have /Login, or /Error, are not needed
 
 Some of mandatory url paths:
@@ -31,6 +33,8 @@ This is also a discovery level where I create new urls with certain query params
 4. When gathered all JobDetails urls (or any similar) then all of those should be exectued to retrieve then job details for final data, also there can probably be urls with JobDetail already seeded from beggining and those urls should also be tested if they return anything, and now again fetched to see if they return relevant job details.
 
 Data is retrieved from html as jobs have recognizable html structure which can be easily parsed.
+
+- added checkpoint so if extraction fails we can continue from left of point
 
 5. Finally all that retrieved data should be stored to some file
 

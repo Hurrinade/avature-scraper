@@ -10,6 +10,7 @@ export async function profileMain(argv: string[]): Promise<void> {
 
   await runProfileBuilder({
     limitHosts: args.limitHosts,
+    inputUrlsFile: args.inputUrlsFile,
     hostProfilesFile: args.hostProfilesFile,
   });
 }
