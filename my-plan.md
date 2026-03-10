@@ -43,9 +43,9 @@ Architecture:
 - there is initial script which is used to gather more urls and potential endpoints from which we can fetch jobs
 - after that those urls are stored in certain file and then read as it is currently with urls.txt file provided
 - those urls get read and go through process described above where cleanup and filtering happenes, with ending of extracting job listings into json file
+- process is in steps and steps can be executed alone
 
 What to upgrade:
 
-- maybe some kind of checkpointing system on longer runs
-- better logging
-- filtering urls which are used (clearing of whole Urls file)
+- maybe some kind of checkpointing system on longer runs on other steps
+- filtering urls which are used (clearing of whole Urls file) (overall cleanup of the file)

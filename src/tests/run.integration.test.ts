@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { runProfileBuilder, runScraper } from "../scraper/run.ts";
+import {
+  runDetailsOnly,
+  runDiscoveryOnly,
+  runProfileBuilder,
+  runScraper,
+} from "../scraper/run.ts";
 import type {
   HostProfile,
   JobOutput,
@@ -10,7 +15,7 @@ import type {
   RejectedUrlRecord,
   RunOptions,
 } from "../types/index.ts";
-import { fileExists, readJsonFile } from "../utils/fs.ts";
+import { ensureDirForFile, fileExists, readJsonFile } from "../utils/fs.ts";
 import { readJsonl } from "../utils/jsonl.ts";
 
 const alwaysReachableSeedProbe = async () => true;
@@ -511,8 +516,18 @@ async function createFixture(inputLines?: string[]) {
     hostProfilesFile: path.join(outputDir, "host_profiles.json"),
     jobUrlsPath: path.join(outputDir, "job_urls.jsonl"),
     rejectedPath: path.join(outputDir, "rejected_urls.jsonl"),
+    detailCheckpointPath: path.join(outputDir, "job_detail_checkpoint.jsonl"),
     jobsPath: path.join(outputDir, "jobs.json"),
   };
+}
+
+async function writeJobUrlRecords(
+  filePath: string,
+  records: JobUrlRecord[],
+): Promise<void> {
+  await ensureDirForFile(filePath);
+  const content = records.map((record) => JSON.stringify(record)).join("\n");
+  await writeFile(filePath, `${content}\n`, "utf8");
 }
 
 describe("split pipeline integration", () => {
@@ -566,6 +581,60 @@ describe("split pipeline integration", () => {
       request.startsWith("https://z.example/"),
     );
     expect(zRequests).toEqual([]);
+  });
+
+  test("runDiscoveryOnly writes job_urls.jsonl without fetching job detail pages", async () => {
+    const fixture = await createFixture();
+
+    const originalFetch = globalThis.fetch;
+    const profileRequests: string[] = [];
+    const profileMockFetch = buildMockFetch(profileRequests);
+    const profileHttpRequestFn = buildHttpRequestFromFetch(profileMockFetch);
+    globalThis.fetch = profileMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async (host) => host !== "z.example",
+        httpRequestFn: profileHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const discoveryRequests: string[] = [];
+    const discoveryMockFetch = buildMockFetch(discoveryRequests);
+    const discoveryHttpRequestFn = buildHttpRequestFromFetch(discoveryMockFetch);
+    globalThis.fetch = discoveryMockFetch;
+    try {
+      await runDiscoveryOnly({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        discoveryConcurrency: 2,
+        profileSourceMode: "seeded",
+        httpRequestFn: discoveryHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const jobUrls = await readJsonl<JobUrlRecord>(fixture.jobUrlsPath);
+    expect(jobUrls.map((record) => record.canonicalJobDetailUrl).sort()).toEqual([
+      "https://a.example/careers/JobDetail/One/1",
+      "https://a.example/careers/JobDetail/Seeded/9?jobId=SEED-9",
+      "https://a.example/careers/JobDetail/Two/2",
+    ]);
+
+    const detailRequests = discoveryRequests.filter((request) =>
+      request.includes("/careers/JobDetail/"),
+    );
+    expect(detailRequests).toEqual([]);
   });
 
   test("runScraper defaults to seeded mode and default host_profiles path", async () => {
@@ -628,6 +697,144 @@ describe("split pipeline integration", () => {
     ]);
     expect(rejected.some((item) => item.stage === "discovery")).toBeTrue();
     expect(scraperRequests.includes("https://z.example/careers")).toBeFalse();
+  });
+
+  test("runDetailsOnly merges jobs and skips already-attempted URLs from checkpoint", async () => {
+    const fixture = await createFixture();
+    const records: JobUrlRecord[] = [
+      {
+        host: "a.example",
+        listingUrl: "https://a.example/careers/SearchJobs",
+        jobDetailUrl: "https://a.example/careers/JobDetail/One/1",
+        canonicalJobDetailUrl: "https://a.example/careers/JobDetail/One/1",
+        discoveredAt: new Date(0).toISOString(),
+      },
+      {
+        host: "a.example",
+        listingUrl: "https://a.example/careers/SearchJobs",
+        jobDetailUrl: "https://a.example/careers/JobDetail/Two/2",
+        canonicalJobDetailUrl: "https://a.example/careers/JobDetail/Two/2",
+        discoveredAt: new Date(0).toISOString(),
+      },
+      {
+        host: "a.example",
+        listingUrl: "https://a.example/careers/SearchJobs",
+        jobDetailUrl: "https://a.example/careers/JobDetail/Missing/404",
+        canonicalJobDetailUrl: "https://a.example/careers/JobDetail/Missing/404",
+        discoveredAt: new Date(0).toISOString(),
+      },
+    ];
+    await writeJobUrlRecords(fixture.jobUrlsPath, records);
+
+    const originalFetch = globalThis.fetch;
+    const firstRunRequests: string[] = [];
+    const firstRunFetch = buildMockFetch(firstRunRequests);
+    const firstRunHttpRequestFn = buildHttpRequestFromFetch(firstRunFetch);
+    globalThis.fetch = firstRunFetch;
+    try {
+      await runDetailsOnly({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        detailConcurrency: 2,
+        httpRequestFn: firstRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const firstRunJobs = await readJsonFile<JobOutput[]>(fixture.jobsPath);
+    const firstCheckpoint = await readJsonl(fixture.detailCheckpointPath);
+    expect(firstRunJobs.map((job) => job.jobTitle).sort()).toEqual([
+      "Engineer One",
+      "Engineer Two",
+    ]);
+    expect(firstCheckpoint).toHaveLength(3);
+
+    const secondRunRequests: string[] = [];
+    const secondRunFetch = buildMockFetch(secondRunRequests);
+    const secondRunHttpRequestFn = buildHttpRequestFromFetch(secondRunFetch);
+    globalThis.fetch = secondRunFetch;
+    try {
+      await runDetailsOnly({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        detailConcurrency: 2,
+        httpRequestFn: secondRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const secondRunJobs = await readJsonFile<JobOutput[]>(fixture.jobsPath);
+    const secondCheckpoint = await readJsonl(fixture.detailCheckpointPath);
+    expect(secondRunJobs.map((job) => job.jobTitle).sort()).toEqual([
+      "Engineer One",
+      "Engineer Two",
+    ]);
+    expect(secondCheckpoint).toHaveLength(3);
+    const secondDetailRequests = secondRunRequests.filter((request) =>
+      request.includes("/careers/JobDetail/"),
+    );
+    expect(secondDetailRequests).toEqual([]);
+  });
+
+  test("runDetailsOnly fresh-run clears checkpoint and refetches URLs", async () => {
+    const fixture = await createFixture();
+    const records: JobUrlRecord[] = [
+      {
+        host: "a.example",
+        listingUrl: "https://a.example/careers/SearchJobs",
+        jobDetailUrl: "https://a.example/careers/JobDetail/One/1",
+        canonicalJobDetailUrl: "https://a.example/careers/JobDetail/One/1",
+        discoveredAt: new Date(0).toISOString(),
+      },
+    ];
+    await writeJobUrlRecords(fixture.jobUrlsPath, records);
+
+    const originalFetch = globalThis.fetch;
+    const firstRunRequests: string[] = [];
+    const firstRunFetch = buildMockFetch(firstRunRequests);
+    const firstRunHttpRequestFn = buildHttpRequestFromFetch(firstRunFetch);
+    globalThis.fetch = firstRunFetch;
+    try {
+      await runDetailsOnly({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        detailConcurrency: 1,
+        httpRequestFn: firstRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const secondRunRequests: string[] = [];
+    const secondRunFetch = buildMockFetch(secondRunRequests);
+    const secondRunHttpRequestFn = buildHttpRequestFromFetch(secondRunFetch);
+    globalThis.fetch = secondRunFetch;
+    try {
+      await runDetailsOnly({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        detailConcurrency: 1,
+        freshRun: true,
+        httpRequestFn: secondRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const secondDetailRequests = secondRunRequests.filter((request) =>
+      request.includes("/careers/JobDetail/One/1"),
+    );
+    expect(secondDetailRequests).toHaveLength(1);
   });
 
   test("runScraper generate mode uses legend totals to stop pagination early", async () => {

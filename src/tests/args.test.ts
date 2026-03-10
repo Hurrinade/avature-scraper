@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgs, parseProfileArgs } from "../cli/args.ts";
+import {
+  parseArgs,
+  parseDetailsArgs,
+  parseDiscoverArgs,
+  parseProfileArgs,
+} from "../cli/args.ts";
 
 describe("cli args", () => {
   test("parses help flags", () => {
@@ -46,5 +51,37 @@ describe("profile cli args", () => {
     ]);
     expect(parsed.limitHosts).toBe(3);
     expect(parsed.hostProfilesFile).toBe("output/custom-hosts.json");
+  });
+});
+
+describe("discover cli args", () => {
+  test("parses discover command flags", () => {
+    const parsed = parseDiscoverArgs([
+      "bun",
+      "discover.ts",
+      "--limit-hosts=4",
+      "--profile-source-mode=generate",
+      "--host-profiles-file=output/custom-hosts.json",
+    ]);
+
+    expect(parsed.limitHosts).toBe(4);
+    expect(parsed.profileSourceMode).toBe("generate");
+    expect(parsed.hostProfilesFile).toBe("output/custom-hosts.json");
+  });
+});
+
+describe("details cli args", () => {
+  test("parses details command flags", () => {
+    const parsed = parseDetailsArgs([
+      "bun",
+      "details.ts",
+      "--job-urls-file=output/custom-job-urls.jsonl",
+      "--limit-jobs=20",
+      "--fresh-run",
+    ]);
+
+    expect(parsed.jobUrlsFile).toBe("output/custom-job-urls.jsonl");
+    expect(parsed.limitJobs).toBe(20);
+    expect(parsed.freshRun).toBeTrue();
   });
 });

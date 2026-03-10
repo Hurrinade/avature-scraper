@@ -6,6 +6,8 @@
   "scripts": {
     "start": "bun run index.ts",
     "profile": "bun run profile.ts",
+    "discover": "bun run discover.ts",
+    "details": "bun run details.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
   },

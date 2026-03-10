@@ -58,7 +58,9 @@ export function hasBlockedPath(raw: string): boolean {
 
   return (
     !hasCareersPath(raw) ||
-    /(?:^|\/)careers\/(?:login|error)(?:\/|$)/i.test(path)
+    /(?:^|\/)careers\/(?:login|error|applicationmethods|_facebookLogin|_indeedLogin|Register|ResetPassword)(?:\/|$)/i.test(
+      path,
+    )
   );
 }
 
@@ -188,10 +190,14 @@ export function normalizeProfilePath(raw: string): string | null {
     (segment) => segment === "jobdetail" || segment === "jobdetails",
   );
   if (detailIndex >= 0) {
-    return ensureTrailingSlash(`/${segments.slice(0, detailIndex + 1).join("/")}`);
+    return ensureTrailingSlash(
+      `/${segments.slice(0, detailIndex + 1).join("/")}`,
+    );
   }
 
-  const searchJobsIndex = lower.findIndex((segment) => segment === "searchjobs");
+  const searchJobsIndex = lower.findIndex(
+    (segment) => segment === "searchjobs",
+  );
   if (searchJobsIndex >= 0) {
     return ensureTrailingSlash(
       `/${segments.slice(0, searchJobsIndex + 1).join("/")}`,

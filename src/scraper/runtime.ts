@@ -12,6 +12,7 @@ export interface RuntimeConfig {
   inputUrlsFile: string;
   outputDir: string;
   hostProfilesFile: string;
+  detailCheckpointPath: string;
   profileSourceMode: ProfileSourceMode;
   writeRejects: boolean;
   jobUrlsPath: string;
@@ -107,9 +108,18 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       options.hostProfilesFile,
       path.join(outputDir, "host_profiles.json"),
     ),
+    detailCheckpointPath: resolvePath(
+      cwd,
+      options.detailCheckpointFile,
+      path.join(outputDir, "job_detail_checkpoint.jsonl"),
+    ),
     profileSourceMode: options.profileSourceMode ?? "seeded",
     writeRejects: options.writeRejects ?? false,
-    jobUrlsPath: path.resolve(outputDir, "job_urls.jsonl"),
+    jobUrlsPath: resolvePath(
+      cwd,
+      options.jobUrlsFile ?? options.discoveredUrlsFile,
+      path.join(outputDir, "job_urls.jsonl"),
+    ),
     rejectedUrlsPath: path.resolve(outputDir, "rejected_urls.jsonl"),
     jobsPath: path.resolve(outputDir, "jobs.json"),
     limitHosts: options.limitHosts,
@@ -203,4 +213,12 @@ export async function resetExtractionOutputFiles(
   await resetJsonl(config.jobUrlsPath);
   await resetJsonl(config.rejectedUrlsPath);
   await rm(config.jobsPath, { force: true });
+}
+
+export async function resetDiscoveryOutputFiles(
+  config: RuntimeConfig,
+): Promise<void> {
+  await ensureDir(config.outputDir);
+  await resetJsonl(config.jobUrlsPath);
+  await resetJsonl(config.rejectedUrlsPath);
 }

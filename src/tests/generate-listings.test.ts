@@ -44,4 +44,14 @@ describe("listing template generation", () => {
     expect(templates.every((template) => template.url.includes("jobOffset=0"))).toBeTrue();
     expect(templates[0]?.url.includes("jobRecordsPerPage=6")).toBeTrue();
   });
+
+  test("does not enable offset pagination for non-SearchJobs listing URLs", () => {
+    const template = templateFromUrl("https://example.avature.net/careers");
+    expect(template).not.toBeNull();
+    expect(template?.supportsPagination).toBeFalse();
+
+    const profile = makeProfile(["https://example.avature.net/careers"]);
+    const generated = generateListingTemplates(profile, 3);
+    expect(generated).toHaveLength(0);
+  });
 });

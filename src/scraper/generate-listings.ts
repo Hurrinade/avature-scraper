@@ -2,7 +2,7 @@ import type { HostProfile } from "../types/index.ts";
 import { canonicalizeUrl, hasBlockedPath, safeParseUrl } from "../utils/url.ts";
 
 const DEFAULT_PAGE_SIZE = 12;
-const LISTING_HINTS = [/\/careers\b/i, /searchjobs/i];
+const SEARCH_JOBS_HINT = /searchjobs/i;
 
 export interface ListingTemplate {
   url: string;
@@ -17,12 +17,12 @@ function parsePositiveInt(raw: string | null): number | null {
   return Math.floor(parsed);
 }
 
-function hasPaginationHint(parsed: URL): boolean {
+function supportsOffsetPagination(parsed: URL): boolean {
   const full = `${parsed.pathname}${parsed.search}`.toLowerCase();
   if (hasBlockedPath(parsed.toString())) return false;
   if (/jobdetail|jobdetails/.test(full)) return false;
-
-  return LISTING_HINTS.some((pattern) => pattern.test(full));
+  // Only SearchJobs endpoints should generate jobOffset pages.
+  return SEARCH_JOBS_HINT.test(full);
 }
 
 function canonicalOrNull(raw: string): string | null {
@@ -42,7 +42,7 @@ export function templateFromUrl(raw: string): ListingTemplate | null {
 
   return {
     url: canonical,
-    supportsPagination: hasPaginationHint(parsed),
+    supportsPagination: supportsOffsetPagination(parsed),
     pageSize: pageSize ?? DEFAULT_PAGE_SIZE,
   };
 }

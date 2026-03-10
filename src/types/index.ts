@@ -13,6 +13,20 @@ export interface ProfileCliArgs {
   hostProfilesFile?: string;
 }
 
+export interface DiscoverCliArgs {
+  help: boolean;
+  limitHosts?: number;
+  profileSourceMode?: ProfileSourceMode;
+  hostProfilesFile?: string;
+}
+
+export interface DetailsCliArgs {
+  help: boolean;
+  limitJobs?: number;
+  jobUrlsFile?: string;
+  freshRun?: boolean;
+}
+
 export interface SeedHost {
   host: string;
   candidateUrls: string[];
@@ -61,6 +75,12 @@ export interface JobOutput {
   scrapedAt: string;
 }
 
+export interface JobDetailCheckpointRecord {
+  url: string;
+  status: "success" | "failed";
+  attemptedAt: string;
+}
+
 export interface SearchHitRecord {
   query: string;
   pageIndex: number;
@@ -78,7 +98,10 @@ export interface RunOptions {
   inputUrlsFile?: string;
   outputDir?: string;
   hostProfilesFile?: string;
+  jobUrlsFile?: string;
   discoveredUrlsFile?: string;
+  detailCheckpointFile?: string;
+  freshRun?: boolean;
   profileSourceMode?: ProfileSourceMode;
   limitHosts?: number;
   limitJobs?: number;
