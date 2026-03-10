@@ -33,3 +33,68 @@ I first go with profiling and seeding:
 
 - filtering unreachable hosts so I don't even bother with urls in the later stage
 - I need to make parallel readings of the urls file because it is to slow to sequential, basically seeding and profiling is data cleanup needed to be done before anything more advanced gets executed on those urls as I need to retrieve data for jobs
+
+// Body of job detail
+
+<script type="application/ld+json">{"@context":"https:\/\/schema.org\/","@type":"JobPosting","title":"Senior Software Engineer 21838","description":"Provides significant contributions in the design, coding, testing, support and debugging of new software or enhancements to existing software.\n\n\tThis role reports to the office on hybrid bases, three times a week in 601 S. Tryon Street, Charlotte, NC","hiringOrganization":{"@type":"Organization","name":"Ally Financial"},"datePosted":"2026-03-09","jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressLocality":"Charlotte, NC"}}}</script>
+
+```html
+<article
+  class="article article--details regular-fields--cols-2Z js_collapsible"
+  aria-expanded="false"
+>
+  <div class="article__header js_collapsible__header">
+    <div class="article__header__text">
+      <h3 class="article__header__text__title article__header__text__title--6">
+        <i
+          class="article__header__text__title__icon fv fv-address-book-o fa-fw"
+          aria-hidden="true"
+        ></i>
+
+        General information
+      </h3>
+    </div>
+  </div>
+
+  <div class="article__content js_collapsible__content">
+    <div class="article__content__view">
+      <div class="article__content__view__field">
+        <div class="article__content__view__field__label">Job Title</div>
+
+        <div class="article__content__view__field__value">
+          Production Operator
+        </div>
+      </div>
+      <div class="article__content__view__field">
+        <div class="article__content__view__field__label">Location</div>
+
+        <div class="article__content__view__field__value">
+          Australia - New South Wales
+        </div>
+      </div>
+      <div class="article__content__view__field">
+        <div class="article__content__view__field__label">Date Published</div>
+
+        <div class="article__content__view__field__value">
+          Thursday, March 5, 2026
+        </div>
+      </div>
+      <div class="article__content__view__field">
+        <div class="article__content__view__field__label">Ref #</div>
+
+        <div class="article__content__view__field__value">376</div>
+      </div>
+      <div class="article__content__view__field">
+        <div class="article__content__view__field__label">Work Type</div>
+
+        <div class="article__content__view__field__value">Permanent</div>
+      </div>
+      <div class="article__content__view__field">
+        <div class="article__content__view__field__label">Business Unit</div>
+
+        <div class="article__content__view__field__value">Production</div>
+      </div>
+    </div>
+  </div>
+</article>
+```

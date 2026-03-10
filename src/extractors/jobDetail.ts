@@ -3,15 +3,17 @@ import type { JobOutput } from "../types/index.ts";
 import { cleanTextFromHtml, normalizeWhitespace } from "../utils/text.ts";
 import { canonicalDetailUrl, safeParseUrl } from "../utils/url.ts";
 
-function normalizeMaybe(value: string | undefined | null): string | undefined {
+function normalizeValue(value: string | undefined | null): string | undefined {
   if (!value) return undefined;
   const normalized = normalizeWhitespace(value);
   return normalized || undefined;
 }
 
-function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
+function firstNonEmpty(
+  ...values: Array<string | undefined>
+): string | undefined {
   for (const value of values) {
-    const normalized = normalizeMaybe(value);
+    const normalized = normalizeValue(value);
     if (normalized) return normalized;
   }
   return undefined;
@@ -29,6 +31,7 @@ function extractDescriptionHtml(html: string): string | undefined {
     "main",
   ];
 
+  // Extract the longest block of text from the job detail page.
   let winner = "";
   for (const selector of selectors) {
     $(selector).each((_, element) => {
@@ -44,26 +47,31 @@ function extractDescriptionHtml(html: string): string | undefined {
   return winner.length > 20 ? winner : undefined;
 }
 
-function extractMetadata($: ReturnType<typeof load>): Record<string, string | string[] | null> {
+function extractMetadata(
+  $: ReturnType<typeof load>,
+): Record<string, string | string[] | null> {
   const metadata: Record<string, string | string[] | null> = {};
 
   const put = (key: string, value: string | undefined) => {
-    const normalizedKey = normalizeMaybe(key)?.replace(/[:\-]\s*$/, "").toLowerCase();
-    const normalizedValue = normalizeMaybe(value);
+    const normalizedKey = normalizeValue(key);
+    const normalizedValue = normalizeValue(value);
     if (!normalizedKey || !normalizedValue) return;
     if (!(normalizedKey in metadata)) {
       metadata[normalizedKey] = normalizedValue;
     }
   };
 
-  $("dt").each((_, element) => {
-    put($(element).text(), $(element).next("dd").text());
-  });
-
-  $("tr").each((_, row) => {
-    const first = $(row).find("th, td").first().text();
-    const second = $(row).find("td").eq(1).text();
-    put(first, second);
+  // Extract metadata from the job detail page.
+  $(".article__content__view__field").each((_, element) => {
+    const label = $(element)
+      .find(".article__content__view__field__label")
+      .first()
+      .text();
+    const value = $(element)
+      .find(".article__content__view__field__value")
+      .first()
+      .text();
+    put(label, value);
   });
 
   return metadata;
@@ -81,11 +89,16 @@ function extractJobId(detailUrl: string, pageText: string): string | undefined {
   }
 
   const match =
-    /(?:job\s*id|requisition\s*id|req\s*id)\s*[:#]?\s*([A-Za-z0-9\-_/.]{2,})/i.exec(pageText);
+    /(?:job\s*id|requisition\s*id|req\s*id)\s*[:#]?\s*([A-Za-z0-9\-_/.]{2,})/i.exec(
+      pageText,
+    );
   return match?.[1];
 }
 
-function resolveApplicationUrl($: ReturnType<typeof load>, baseUrl: string): string | undefined {
+function resolveApplicationUrl(
+  $: ReturnType<typeof load>,
+  baseUrl: string,
+): string | undefined {
   let applicationUrl: string | undefined;
 
   $("a[href]").each((_, element) => {
@@ -107,7 +120,11 @@ function resolveApplicationUrl($: ReturnType<typeof load>, baseUrl: string): str
   return applicationUrl;
 }
 
-export function extractJobDetail(host: string, detailUrl: string, html: string): JobOutput {
+export function extractJobDetail(
+  host: string,
+  detailUrl: string,
+  html: string,
+): JobOutput {
   const $ = load(html);
   const pageText = normalizeWhitespace($("body").text());
 
@@ -116,17 +133,30 @@ export function extractJobDetail(host: string, detailUrl: string, html: string):
     ? cleanTextFromHtml(descriptionHtml)
     : firstNonEmpty($("main").text(), $("article").text());
 
+  console.log("descriptionText", descriptionText);
+
   const metadata = extractMetadata($);
 
   const location = firstNonEmpty(
     $("[class*='location'], [id*='location']").first().text(),
+    typeof metadata.Location === "string" ? metadata.Location : undefined,
     typeof metadata.location === "string" ? metadata.location : undefined,
   );
 
   const datePosted = firstNonEmpty(
     $("time[datetime]").first().attr("datetime"),
-    $("[class*='posted'], [id*='posted'], [class*='date'], [id*='date']").first().text(),
-    typeof metadata["date posted"] === "string" ? metadata["date posted"] : undefined,
+    $("[class*='posted'], [id*='posted'], [class*='date'], [id*='date']")
+      .first()
+      .text(),
+    typeof metadata["Date Published"] === "string"
+      ? metadata["Date Published"]
+      : undefined,
+    typeof metadata["Date Posted"] === "string"
+      ? metadata["Date Posted"]
+      : undefined,
+    typeof metadata["date posted"] === "string"
+      ? metadata["date posted"]
+      : undefined,
   );
 
   const jobId = extractJobId(detailUrl, pageText);
