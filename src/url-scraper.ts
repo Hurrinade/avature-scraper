@@ -1,7 +1,7 @@
-import axios from "axios";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import pLimit from "p-limit";
+import { request } from "undici";
 
 const DEFAULT_OUTPUT_FILE = "Urls.generated.txt";
 const CRTSH_ENDPOINT = "https://crt.sh/?q=%.avature.net&output=json";
@@ -92,11 +92,32 @@ function normalizeAvatureDomain(raw: string): string | null {
 }
 
 async function fetchAvatureSubdomains(): Promise<string[]> {
-  const res = await axios.get<CrtShRow[]>(CRTSH_ENDPOINT, { timeout: 15000 });
+  const { statusCode, body } = await request(CRTSH_ENDPOINT, {
+    method: "GET",
+    signal: AbortSignal.timeout(15000),
+    headers: {
+      accept: "application/json",
+    },
+  });
+  const responseText = await body.text();
+
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error(`ct_fetch_failed_status_${statusCode}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
+    throw new Error("ct_fetch_invalid_json");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("ct_fetch_invalid_shape");
+  }
 
   const domains = new Set<string>();
 
-  for (const row of res.data) {
+  for (const row of parsed as CrtShRow[]) {
     if (typeof row.name_value !== "string" || !row.name_value.trim()) continue;
     const names = row.name_value.split("\n");
 
@@ -119,13 +140,38 @@ async function isReachableCareerUrl(
   url: string,
   timeoutMs: number,
 ): Promise<boolean> {
+  let currentUrl = url;
+  const maxRedirects = 5;
+
   try {
-    const response = await axios.get(url, {
-      timeout: timeoutMs,
-      maxRedirects: 5,
-      validateStatus: () => true,
-    });
-    return response.status >= 200 && response.status < 400;
+    for (let i = 0; i <= maxRedirects; i += 1) {
+      const { statusCode, body, headers } = await request(currentUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (body.dump) {
+        await body.dump();
+      }
+
+      const locationHeader = headers.location;
+      const location = Array.isArray(locationHeader)
+        ? locationHeader[0]
+        : locationHeader;
+      if (
+        statusCode >= 300 &&
+        statusCode < 400 &&
+        typeof location === "string" &&
+        location.trim()
+      ) {
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      }
+
+      return statusCode >= 200 && statusCode < 400;
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -150,7 +196,10 @@ async function filterReachableCareerUrls(
   return checks.filter((item) => item.ok).map((item) => item.url);
 }
 
-async function writeUrlsToFile(outputFile: string, urls: string[]): Promise<void> {
+async function writeUrlsToFile(
+  outputFile: string,
+  urls: string[],
+): Promise<void> {
   const absoluteOutput = path.resolve(process.cwd(), outputFile);
   await mkdir(path.dirname(absoluteOutput), { recursive: true });
   const content = urls.join("\n");
