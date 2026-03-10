@@ -6,6 +6,16 @@ export async function appendJsonl(filePath: string, value: unknown): Promise<voi
   await appendFile(filePath, `${JSON.stringify(value)}\n`, "utf8");
 }
 
+export async function appendJsonlMany(
+  filePath: string,
+  values: unknown[],
+): Promise<void> {
+  if (values.length === 0) return;
+  await ensureDirForFile(filePath);
+  const payload = values.map((value) => JSON.stringify(value)).join("\n");
+  await appendFile(filePath, `${payload}\n`, "utf8");
+}
+
 export async function resetJsonl(filePath: string): Promise<void> {
   await ensureDirForFile(filePath);
   await Bun.write(filePath, "");

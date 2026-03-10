@@ -34,12 +34,14 @@ Important work:
 - Keep only reachable URLs (`2xx`) as valid candidates.
 - Classify reachable URLs into listing URLs (for discovery) and seeded detail URLs (direct job details).
 - Detect block behavior (`403`/`429`) to distinguish blocked vs unreachable hosts.
+- Use shared HTTP helper timeout (`HTTP_TIMEOUT_MS`, default `8000`) for fast-fail behavior.
 - Save per-host profile fields: reachability (`reachable`, `blocked`, `unreachable`), counters, reachable listing URLs, reachable seeded detail URLs, and check timestamp.
 
 Why this keeps it clean:
 - Discovery only runs on proven reachable hosts/URLs.
 - Host profile output is deterministic input for later steps.
 - Blocked hosts are tracked explicitly instead of treated as generic failures.
+- Timeout control prevents long stalls on slow endpoints.
 
 Reject examples:
 - `unreachable_candidate`
@@ -55,16 +57,20 @@ Important work:
 - Use only hosts marked `reachable` in host profiles.
 - Build listing templates from profiled listing URLs.
 - In `generate` mode, synthesize additional listing URLs from known patterns.
+- Crawl templates in bounded parallel per host (`DISCOVERY_TEMPLATE_CONCURRENCY`, default `3`) while keeping page order sequential inside each template.
 - Crawl listing pages and extract job-detail links from HTML/JSON/script content.
 - Canonicalize and globally dedupe discovered job-detail URLs.
 - Support pagination by changing `jobOffset` and reading pagination legend when available.
 - Stop pagination safely when page limit is reached, empty-page streak is hit, or known total results are exhausted.
 - Merge discovered detail URLs with reachable seeded detail URLs.
+- Write discovered URLs to `job_urls.jsonl` in batched append mode (same file format, fewer syscalls).
 
 Why this keeps it clean:
 - URL generation is controlled and host-specific.
 - Pagination has stop conditions, so crawling does not run forever.
 - Canonical dedupe prevents repeated detail fetches.
+- Template-level concurrency increases throughput without changing pagination logic.
+- Batched writes reduce I/O overhead without changing output data.
 
 Reject examples:
 - `listing_unreachable`
@@ -77,6 +83,7 @@ Purpose: fetch each unique job-detail URL and map page HTML into structured job 
 
 Important work:
 - Fetch detail pages concurrently.
+- Use the same shared HTTP timeout control for detail fetches.
 - Require reachable detail pages (`2xx`) and non-empty body.
 - Parse HTML and extract title, description text/html, application URL, and metadata (location, date posted, job ID when available).
 - Canonicalize job-detail URL before storing.
@@ -115,4 +122,6 @@ Why this keeps it clean:
 - Filter known-noise paths early.
 - Prefer host-level gating before URL-level deep crawling.
 - Use controlled concurrency for scale without overload.
+- Use shared HTTP helper with timeout and explicit body draining/release for connection reuse.
 - Track stage-specific rejections for debugging and cleanup.
+- Keep hot-path logs minimal (stage-level progress only) to avoid unnecessary runtime overhead.

@@ -32,6 +32,7 @@ async function profileHost(
           config.userAgent,
           false,
           config.httpRequestFn,
+          config.httpTimeoutMs,
         );
 
         if (response.statusCode === 403 || response.statusCode === 429) {
@@ -62,8 +63,7 @@ async function profileHost(
             reachableSeedDetails.add(canonical);
           }
         }
-      } catch (error) {
-        console.log("error", error);
+      } catch {
         unreachableCandidateCount += 1;
         await appendReject(config, {
           stage: "profile",

@@ -2,7 +2,7 @@ import { extractJobLinksFromPage } from "../extractors/listing.ts";
 import type { HostProfile, JobUrlRecord } from "../types/index.ts";
 import { mapWithConcurrency } from "../utils/concurrency.ts";
 import { getHeader, performHttpRequest } from "../utils/httpRequest.ts";
-import { appendJsonl } from "../utils/jsonl.ts";
+import { appendJsonlMany } from "../utils/jsonl.ts";
 import {
   canonicalDetailUrl,
   canonicalizeUrl,
@@ -107,6 +107,7 @@ async function crawlListingTemplate(
         config.userAgent,
         true,
         config.httpRequestFn,
+        config.httpTimeoutMs,
       );
 
       if (
@@ -219,22 +220,23 @@ export async function discoverJobUrls(
       }
 
       const templates = collectListingTemplates(config, profile);
-
-      for (const template of templates) {
-        await crawlListingTemplate(
-          config,
-          profile,
-          template,
-          globalSeen,
-          allRecords,
-        );
-      }
+      await mapWithConcurrency(
+        templates,
+        config.discoveryTemplateConcurrency,
+        async (template) => {
+          await crawlListingTemplate(
+            config,
+            profile,
+            template,
+            globalSeen,
+            allRecords,
+          );
+        },
+      );
     },
   );
 
-  for (const record of allRecords) {
-    await appendJsonl(config.jobUrlsPath, record);
-  }
+  await appendJsonlMany(config.jobUrlsPath, allRecords);
 
   return {
     jobUrls: allRecords,

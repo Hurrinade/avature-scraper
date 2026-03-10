@@ -32,6 +32,7 @@ async function fetchJobDetails(
           config.userAgent,
           true,
           config.httpRequestFn,
+          config.httpTimeoutMs,
         );
 
         if (

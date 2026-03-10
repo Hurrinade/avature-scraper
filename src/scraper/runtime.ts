@@ -29,6 +29,7 @@ export interface RuntimeConfig {
   seedProbeConcurrency: number;
   seedProbeTimeoutMs: number;
   seedProbeRetries: number;
+  httpTimeoutMs: number;
   seedProbeFn?: (
     host: string,
     port: number,
@@ -47,6 +48,7 @@ export interface RuntimeConfig {
   generateMaxTemplates: number;
   generateEmptyPageStreak: number;
   generateOffsetStep: number;
+  discoveryTemplateConcurrency: number;
   userAgent: string;
 }
 
@@ -149,6 +151,10 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       "SEED_PROBE_RETRIES",
       options.seedProbeRetries ?? 0,
     ),
+    httpTimeoutMs: toPositiveInt(
+      options.httpTimeoutMs,
+      envPositiveInt("HTTP_TIMEOUT_MS", 8000),
+    ),
     seedProbeFn: options.seedProbeFn,
     httpRequestFn: options.httpRequestFn,
     generateMaxPages: toPositiveInt(
@@ -166,6 +172,10 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
     generateOffsetStep: toPositiveInt(
       options.generateOffsetStep,
       envPositiveInt("GENERATE_OFFSET_STEP", 6),
+    ),
+    discoveryTemplateConcurrency: toPositiveInt(
+      options.discoveryTemplateConcurrency,
+      envPositiveInt("DISCOVERY_TEMPLATE_CONCURRENCY", 3),
     ),
     userAgent:
       options.userAgent ??
