@@ -9,11 +9,7 @@ import {
   hasBlockedPath,
   safeParseUrl,
 } from "../utils/url.ts";
-import {
-  generateListingTemplates,
-  templateFromUrl,
-  type ListingTemplate,
-} from "./generate-listings.ts";
+import { templateFromUrl } from "./generate-listings.ts";
 import { appendReject, nowIso, type RuntimeConfig } from "./runtime.ts";
 
 export interface DiscoveryResult {
@@ -21,10 +17,10 @@ export interface DiscoveryResult {
   reachableSeedDetailUrls: string[];
 }
 
-function isListingTemplate(
-  value: ListingTemplate | null,
-): value is ListingTemplate {
-  return Boolean(value);
+const OFFSET_PAGINATION_PATH = "/careers/SearchJobs";
+
+function isOffsetPaginationPath(pathname: string): boolean {
+  return pathname === OFFSET_PAGINATION_PATH;
 }
 
 export function buildGeneratedPageUrl(
@@ -36,6 +32,7 @@ export function buildGeneratedPageUrl(
 
   const parsed = safeParseUrl(templateUrl);
   if (!parsed) return templateUrl;
+  if (!isOffsetPaginationPath(parsed.pathname)) return templateUrl;
 
   parsed.searchParams.set("jobOffset", String(Math.max(0, offset)));
 
@@ -44,50 +41,51 @@ export function buildGeneratedPageUrl(
   );
 }
 
-function collectListingTemplates(
-  config: RuntimeConfig,
-  profile: HostProfile,
-): ListingTemplate[] {
-  const seeded = profile.reachableListingUrls
-    .map((url) => templateFromUrl(url))
-    .filter(isListingTemplate);
+function collectListingTemplateUrls(profile: HostProfile): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
 
-  if (config.profileSourceMode !== "generate") {
-    return seeded;
+  for (const listingUrl of profile.reachableListingUrls) {
+    const template = templateFromUrl(listingUrl);
+    if (!template || seen.has(template.url)) continue;
+    seen.add(template.url);
+    urls.push(template.url);
   }
 
-  const generated = generateListingTemplates(
-    profile,
-    config.generateMaxTemplates,
-  );
-  const merged = new Map<string, ListingTemplate>();
+  return urls;
+}
 
-  for (const template of [...seeded, ...generated]) {
-    if (!merged.has(template.url)) {
-      merged.set(template.url, template);
-    }
+function selectHostOffsetBaseUrl(profile: HostProfile): string | null {
+  for (const listingUrl of profile.reachableListingUrls) {
+    const template = templateFromUrl(listingUrl);
+    if (!template) continue;
+
+    const parsed = safeParseUrl(template.url);
+    if (!parsed || !isOffsetPaginationPath(parsed.pathname)) continue;
+
+    return template.url;
   }
 
-  return Array.from(merged.values());
+  return null;
 }
 
 /**
  * Crawls a listing template and collects job URLs. Handles pagination. Returns when all pages are visited or when the total number of results is known and the current offset is greater than or equal to the total number of results.
  * @param config - The runtime configuration.
  * @param profile - The host profile.
- * @param template - The listing template.
+ * @param templateUrl - The listing URL to crawl.
+ * @param paginationEnabled - Whether to advance by jobOffset pages.
  * @param globalSeen - A set of seen job detail URLs.
  * @param records - The job URL records to append.
  */
 async function crawlListingTemplate(
   config: RuntimeConfig,
   profile: HostProfile,
-  template: ListingTemplate,
+  templateUrl: string,
+  paginationEnabled: boolean,
   globalSeen: Set<string>,
   records: JobUrlRecord[],
 ): Promise<void> {
-  const paginationEnabled =
-    config.profileSourceMode === "generate" && template.supportsPagination;
   const maxPages = paginationEnabled ? config.generateMaxPages : 1;
   let emptyPages = 0;
   let currentOffset = 0;
@@ -96,7 +94,7 @@ async function crawlListingTemplate(
 
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
     const pageUrl = buildGeneratedPageUrl(
-      template.url,
+      templateUrl,
       currentOffset,
       paginationEnabled,
     );
@@ -219,19 +217,34 @@ export async function discoverJobUrls(
         reachableSeedDetails.add(detail);
       }
 
-      const templates = collectListingTemplates(config, profile);
+      const templates = collectListingTemplateUrls(profile);
       await mapWithConcurrency(
         templates,
         config.discoveryTemplateConcurrency,
-        async (template) => {
+        async (templateUrl) => {
           await crawlListingTemplate(
             config,
             profile,
-            template,
+            templateUrl,
+            false,
             globalSeen,
             allRecords,
           );
         },
+      );
+
+      if (config.profileSourceMode !== "generate") return;
+
+      const offsetBaseUrl = selectHostOffsetBaseUrl(profile);
+      if (!offsetBaseUrl) return;
+
+      await crawlListingTemplate(
+        config,
+        profile,
+        offsetBaseUrl,
+        true,
+        globalSeen,
+        allRecords,
       );
     },
   );

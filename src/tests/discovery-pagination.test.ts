@@ -21,4 +21,16 @@ describe("discovery generated pagination", () => {
     const base = "https://example.avature.net/careers";
     expect(buildGeneratedPageUrl(base, 30, false)).toBe(base);
   });
+
+  test("does not append offset for non-eligible paths", () => {
+    const feed =
+      "https://example.avature.net/careers/SearchJobs/feed?jobRecordsPerPage=6";
+    const careers = "https://example.avature.net/careers";
+    const localized =
+      "https://example.avature.net/en_US/careers/SearchJobs?jobRecordsPerPage=12";
+
+    expect(buildGeneratedPageUrl(feed, 12, true)).toBe(feed);
+    expect(buildGeneratedPageUrl(careers, 12, true)).toBe(careers);
+    expect(buildGeneratedPageUrl(localized, 12, true)).toBe(localized);
+  });
 });

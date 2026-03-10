@@ -271,6 +271,28 @@ function buildPaginatedMockFetch(requestLog: string[]): typeof fetch {
       );
     }
 
+    if (url.pathname === "/careers/SearchJobs/feed") {
+      if (url.searchParams.has("jobOffset")) {
+        return new Response("unexpected offset on feed endpoint", {
+          status: 400,
+        });
+      }
+
+      return new Response(
+        `
+          <html>
+            <body>
+              <a href="/careers/JobDetail/Feed/3">Feed Role</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
     if (url.pathname === "/careers/SearchJobs") {
       const offsetRaw = url.searchParams.get("jobOffset") ?? "0";
       const offset = Number(offsetRaw);
@@ -354,6 +376,24 @@ function buildPaginatedMockFetch(requestLog: string[]): typeof fetch {
               <h1>Engineer Two</h1>
               <div id="job-description"><p>Build systems two.</p></div>
               <a href="/apply/2">Apply now</a>
+            </body>
+          </html>
+        `,
+        {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        },
+      );
+    }
+
+    if (url.pathname === "/careers/JobDetail/Feed/3") {
+      return new Response(
+        `
+          <html>
+            <body>
+              <h1>Feed Engineer</h1>
+              <div id="job-description"><p>Build systems feed.</p></div>
+              <a href="/apply/3">Apply now</a>
             </body>
           </html>
         `,
@@ -1187,6 +1227,69 @@ describe("split pipeline integration", () => {
     expect(
       generatedRequests.some((url) => url.includes("jobOffset=24")),
     ).toBeFalse();
+  });
+
+  test("runScraper generate mode paginates per host only on exact /careers/SearchJobs", async () => {
+    const fixture = await createFixture([
+      "https://a.example/careers/SearchJobs?jobRecordsPerPage=12&listFilterMode=1",
+      "https://a.example/careers/SearchJobs/feed?jobRecordsPerPage=6",
+    ]);
+
+    const originalFetch = globalThis.fetch;
+    const profileMockFetch = buildPaginatedMockFetch([]);
+    const profileHttpRequestFn = buildHttpRequestFromFetch(profileMockFetch);
+    globalThis.fetch = profileMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: alwaysReachableSeedProbe,
+        httpRequestFn: profileHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const requests: string[] = [];
+    const scraperMockFetch = buildPaginatedMockFetch(requests);
+    const scraperHttpRequestFn = buildHttpRequestFromFetch(scraperMockFetch);
+    globalThis.fetch = scraperMockFetch;
+    try {
+      await runScraper({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        discoveryConcurrency: 2,
+        detailConcurrency: 2,
+        profileSourceMode: "generate",
+        generateMaxPages: 8,
+        generateMaxTemplates: 4,
+        generateEmptyPageStreak: 2,
+        httpRequestFn: scraperHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const feedRequests = requests.filter((url) =>
+      url.includes("/careers/SearchJobs/feed"),
+    );
+    expect(feedRequests.length).toBeGreaterThan(0);
+    expect(feedRequests.some((url) => url.includes("jobOffset="))).toBeFalse();
+
+    expect(requests.some((url) => url.includes("/careers/SearchJobs?"))).toBeTrue();
+    expect(requests.some((url) => url.includes("jobOffset=12"))).toBeTrue();
+    expect(requests.some((url) => url.includes("jobOffset=18"))).toBeFalse();
+
+    const generatedJobUrls = await readJsonl<JobUrlRecord>(fixture.jobUrlsPath);
+    const generatedUrls = generatedJobUrls.map((record) => record.canonicalJobDetailUrl);
+    expect(generatedUrls).toContain("https://a.example/careers/JobDetail/Feed/3");
+    expect(generatedUrls).toContain("https://a.example/careers/JobDetail/Two/2");
   });
 
   test("runScraper generate mode falls back to fixed offset when legend is missing", async () => {

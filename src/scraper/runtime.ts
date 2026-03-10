@@ -113,7 +113,7 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
       options.detailCheckpointFile,
       path.join(outputDir, "job_detail_checkpoint.jsonl"),
     ),
-    profileSourceMode: options.profileSourceMode ?? "seeded",
+    profileSourceMode: options.profileSourceMode ?? "generate",
     writeRejects: options.writeRejects ?? false,
     jobUrlsPath: resolvePath(
       cwd,
