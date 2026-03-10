@@ -12,13 +12,16 @@ Minimal Bun + TypeScript scraper that follows `my-plan.md`.
 ## Usage
 
 ```bash
+# Start with profiling
 bun run profile
 bun run profile --fresh-run # Run with file cleanup
 
+# Then run discovery for more job details urls retrieval
 # Discovery-only (overwrites output/job_urls.jsonl)
 bun run discover --profile-source-mode=seeded
 bun run discover --profile-source-mode=generate
 
+# Then use details to extract job details per urls gathered before
 # Details-only (reads output/job_urls.jsonl by default)
 bun run details
 bun run details --job-urls-file=output/job_urls.jsonl
