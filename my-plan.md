@@ -15,6 +15,25 @@ Small research of potential endpoints [here](./research.md)
 
 More in depth file of func [here](./docs/pipeline-steps.md)
 
+# Initial discovery
+
+I added a pre-seeding discovery step using Certificate Transparency (CT) logs via `crt.sh`. This is simple example where I currently hit just one certificate host to gather some urls. More hosts can be added to improve reachability. I am also doing filtering for unreachable urls because there are many returned unreachable.
+
+Logic:
+
+1. Query `https://crt.sh/?q=%.avature.net&output=json`.
+2. Read `name_value` from each certificate log row (CN/SAN hostnames).
+3. Split multiline values, normalize to lowercase, keep only `*.avature.net`.
+4. Dedupe and sort hostnames.
+5. Convert each hostname to candidate career seed URL: `https://<host>/careers`.
+6. Store generated URLs into a file (for example `Urls.generated.txt` or directly `Urls.txt`).
+7. Pass that file to the existing pipeline (`profile -> discover -> details`) where unreachable or invalid URLs are filtered out.
+
+How to increase discovered hosts:
+
+1. Run discovery periodically and merge new hosts into seed files.
+2. Add additional host sources (other CT providers/search APIs) and dedupe merged results.
+
 # Seeding
 
 From Urls.txt file get all hosts and urls connected to them, it would be okay if certain stuff gets filtered like, endpoints that have /Login, or /Error, are not needed, this is just connected to entrypoint url cleanup

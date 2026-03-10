@@ -12,16 +12,22 @@ Minimal Bun + TypeScript scraper that follows `my-plan.md`.
 ## Usage
 
 ```bash
-# Start with profiling
+# 1) Optional: discover additional Avature career seed URLs from crt.sh
+bun run url-scraper                             # writes Urls.generated.txt
+bun run url-scraper --output=Urls.txt          # overwrite seed file directly
+
+# 2) Start with profiling
 bun run profile
 bun run profile --fresh-run # Run with file cleanup
 
-# Then run discovery for more job details urls retrieval, generate is with offset generation (slower, using also seed urls), seed is just with urls from the initial input (like urls.txt)
+# 3) Run discovery for job detail URLs
+# generate = host-level SearchJobs offset pagination
+# seeded = only crawl validated seeded listing URLs
 # Discovery-only (overwrites output/job_urls.jsonl)
 bun run discover --profile-source-mode=seeded
 bun run discover --profile-source-mode=generate
 
-# Then use details to extract job details per urls gathered before
+# 4) Extract job details from discovered URLs
 # Details-only (reads output/job_urls.jsonl by default)
 bun run details
 bun run details --job-urls-file=output/job_urls.jsonl
@@ -29,6 +35,23 @@ bun run details --job-urls-file=output/job_urls.jsonl
 # Details-only fresh restart (clears jobs + detail checkpoint)
 bun run details --fresh-run
 ```
+
+## URL Scraper (CT-based seed generation)
+
+`bun run url-scraper` queries Certificate Transparency logs from `crt.sh` for `*.avature.net`, extracts hostnames, then writes candidate `https://<host>/careers` URLs to a file.
+
+- Default output: `Urls.generated.txt`
+- Custom output: `bun run url-scraper --output=Urls.txt`
+- By default it excludes wildcard hosts (like `*.avature.net`) and saves only reachable `https://<host>/careers` URLs
+- Skip reachability filtering: `bun run url-scraper --skip-reachability-check`
+- Tune checks: `--check-concurrency=<n> --check-timeout-ms=<n>`
+- Help: `bun run url-scraper --help`
+
+Recommended usage:
+
+1. Generate into `Urls.generated.txt`.
+2. Review or merge into your main `Urls.txt`.
+3. Run `bun run profile` to validate reachable hosts/URLs before discovery.
 
 ## Output Artifacts
 
