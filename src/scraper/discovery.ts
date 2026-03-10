@@ -217,7 +217,13 @@ export async function discoverJobUrls(
         reachableSeedDetails.add(detail);
       }
 
-      const templates = collectListingTemplateUrls(profile);
+      const offsetBaseUrl =
+        config.profileSourceMode === "generate"
+          ? selectHostOffsetBaseUrl(profile)
+          : null;
+      const templates = collectListingTemplateUrls(profile).filter(
+        (templateUrl) => templateUrl !== offsetBaseUrl,
+      );
       await mapWithConcurrency(
         templates,
         config.discoveryTemplateConcurrency,
@@ -234,8 +240,6 @@ export async function discoverJobUrls(
       );
 
       if (config.profileSourceMode !== "generate") return;
-
-      const offsetBaseUrl = selectHostOffsetBaseUrl(profile);
       if (!offsetBaseUrl) return;
 
       await crawlListingTemplate(

@@ -177,7 +177,7 @@ export function buildConfig(options: RunOptions): RuntimeConfig {
     ),
     generateEmptyPageStreak: toPositiveInt(
       options.generateEmptyPageStreak,
-      envPositiveInt("GENERATE_EMPTY_PAGE_STREAK", 3),
+      envPositiveInt("GENERATE_EMPTY_PAGE_STREAK", 2),
     ),
     generateOffsetStep: toPositiveInt(
       options.generateOffsetStep,

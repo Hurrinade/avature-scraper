@@ -1283,6 +1283,12 @@ describe("split pipeline integration", () => {
     expect(feedRequests.some((url) => url.includes("jobOffset="))).toBeFalse();
 
     expect(requests.some((url) => url.includes("/careers/SearchJobs?"))).toBeTrue();
+    expect(
+      requests.some(
+        (url) =>
+          url.includes("/careers/SearchJobs?") && !url.includes("jobOffset="),
+      ),
+    ).toBeFalse();
     expect(requests.some((url) => url.includes("jobOffset=12"))).toBeTrue();
     expect(requests.some((url) => url.includes("jobOffset=18"))).toBeFalse();
 
@@ -1290,6 +1296,64 @@ describe("split pipeline integration", () => {
     const generatedUrls = generatedJobUrls.map((record) => record.canonicalJobDetailUrl);
     expect(generatedUrls).toContain("https://a.example/careers/JobDetail/Feed/3");
     expect(generatedUrls).toContain("https://a.example/careers/JobDetail/Two/2");
+  });
+
+  test("runScraper generate mode does not paginate when host lacks exact /careers/SearchJobs", async () => {
+    const fixture = await createFixture([
+      "https://a.example/careers/SearchJobs/feed?jobRecordsPerPage=6",
+    ]);
+
+    const originalFetch = globalThis.fetch;
+    const profileMockFetch = buildPaginatedMockFetch([]);
+    const profileHttpRequestFn = buildHttpRequestFromFetch(profileMockFetch);
+    globalThis.fetch = profileMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: alwaysReachableSeedProbe,
+        httpRequestFn: profileHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const requests: string[] = [];
+    const scraperMockFetch = buildPaginatedMockFetch(requests);
+    const scraperHttpRequestFn = buildHttpRequestFromFetch(scraperMockFetch);
+    globalThis.fetch = scraperMockFetch;
+    try {
+      await runScraper({
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        discoveryConcurrency: 2,
+        detailConcurrency: 2,
+        profileSourceMode: "generate",
+        generateMaxPages: 8,
+        generateMaxTemplates: 4,
+        generateEmptyPageStreak: 2,
+        httpRequestFn: scraperHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(requests.some((url) => url.includes("jobOffset="))).toBeFalse();
+    expect(
+      requests.some((url) => url.includes("/careers/SearchJobs/feed")),
+    ).toBeTrue();
+
+    const generatedJobUrls = await readJsonl<JobUrlRecord>(fixture.jobUrlsPath);
+    const generatedUrls = generatedJobUrls.map((record) => record.canonicalJobDetailUrl);
+    expect(generatedUrls).toEqual([
+      "https://a.example/careers/JobDetail/Feed/3",
+    ]);
   });
 
   test("runScraper generate mode falls back to fixed offset when legend is missing", async () => {
