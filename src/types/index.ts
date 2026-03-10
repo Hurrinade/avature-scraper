@@ -11,6 +11,7 @@ export interface ProfileCliArgs {
   limitHosts?: number;
   inputUrlsFile?: string;
   hostProfilesFile?: string;
+  freshRun?: boolean;
 }
 
 export interface DiscoverCliArgs {

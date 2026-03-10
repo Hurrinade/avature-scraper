@@ -7,6 +7,7 @@ This document explains what each pipeline step does and why each check is import
 Purpose: turn raw `Urls.txt` into clean host buckets before expensive scraping.
 
 Important work:
+
 - Read input URLs line-by-line (memory-safe for large files).
 - Canonicalize URLs and normalize hosts.
 - Filter hard-noise paths early (for example login/error pages).
@@ -15,11 +16,13 @@ Important work:
 - Probe each host reachability first (TCP probe), in parallel.
 
 Why this keeps it clean:
+
 - Unreachable hosts are removed before profile/discovery work.
 - Broken or noisy URLs are rejected early.
 - Host-first gating prevents wasted requests later.
 
 Reject examples:
+
 - `invalid_url`
 - `filtered_login_or_error`
 - `host_unreachable_probe`
@@ -30,6 +33,7 @@ Reject examples:
 Purpose: validate candidate URLs per host and build reusable host profiles.
 
 Important work:
+
 - For each seeded host, test all candidate URLs concurrently.
 - Keep only reachable URLs (`2xx`) as valid candidates.
 - Classify reachable URLs into listing URLs (for discovery) and seeded detail URLs (direct job details).
@@ -38,12 +42,15 @@ Important work:
 - Save per-host profile fields: reachability (`reachable`, `blocked`, `unreachable`), counters, reachable listing URLs, reachable seeded detail URLs, and check timestamp.
 
 Why this keeps it clean:
+
 - Discovery only runs on proven reachable hosts/URLs.
 - Host profile output is deterministic input for later steps.
 - Blocked hosts are tracked explicitly instead of treated as generic failures.
 - Timeout control prevents long stalls on slow endpoints.
+- If host is fully passed it will be marked as passed so future profiling is skipping that host
 
 Reject examples:
+
 - `unreachable_candidate`
 - `fetch_failed`
 - `host_blocked`
@@ -54,6 +61,7 @@ Reject examples:
 Purpose: expand from listing pages to full job-detail URL coverage.
 
 Important work:
+
 - Use only hosts marked `reachable` in host profiles.
 - Build listing templates from profiled listing URLs.
 - In `generate` mode, synthesize additional listing URLs from known patterns.
@@ -66,6 +74,7 @@ Important work:
 - Write discovered URLs to `job_urls.jsonl` in batched append mode (same file format, fewer syscalls).
 
 Why this keeps it clean:
+
 - URL generation is controlled and host-specific.
 - Pagination has stop conditions, so crawling does not run forever.
 - Canonical dedupe prevents repeated detail fetches.
@@ -73,6 +82,7 @@ Why this keeps it clean:
 - Batched writes reduce I/O overhead without changing output data.
 
 Reject examples:
+
 - `listing_unreachable`
 - `listing_fetch_failed`
 - `filtered_login_or_error`
@@ -82,6 +92,7 @@ Reject examples:
 Purpose: fetch each unique job-detail URL and map page HTML into structured job data.
 
 Important work:
+
 - Fetch detail pages concurrently.
 - Use the same shared HTTP timeout control for detail fetches.
 - Require reachable detail pages (`2xx`) and non-empty body.
@@ -89,11 +100,13 @@ Important work:
 - Canonicalize job-detail URL before storing.
 
 Why this keeps it clean:
+
 - Only valid detail pages become job records.
 - Extraction logic is consistent across hosts.
 - Canonical detail URLs improve final dedupe quality.
 
 Reject examples:
+
 - `detail_unreachable`
 - `detail_fetch_failed`
 
@@ -102,10 +115,12 @@ Reject examples:
 Purpose: produce a clean final dataset.
 
 Important work:
+
 - Dedupe records with stable key priority: `host + jobId`, then canonical detail URL, then fallback hash (`host + title + location`).
 - Write final deduped jobs to `output/jobs.json`.
 
 Why this keeps it clean:
+
 - Duplicate job records are removed even when URLs differ.
 - The same pipeline run produces predictable output artifacts.
 

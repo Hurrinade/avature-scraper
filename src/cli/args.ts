@@ -46,6 +46,7 @@ export function parseArgs(argv: string[]): CliArgs {
 export function parseProfileArgs(argv: string[]): ProfileCliArgs {
   const args: ProfileCliArgs = {
     help: argv.includes("--help") || argv.includes("-h"),
+    freshRun: argv.includes("--fresh-run"),
   };
 
   for (const token of argv.slice(2)) {
@@ -145,6 +146,7 @@ Options:
   --limit-hosts=<n>
   --input-urls-file=<path>
   --host-profiles-file=<path>
+  --fresh-run
   -h, --help
 `);
 }

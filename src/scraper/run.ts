@@ -315,28 +315,59 @@ async function mergeAndWriteJobs(
   };
 }
 
+function mergeHostProfiles(
+  existing: HostProfile[],
+  incoming: HostProfile[],
+): HostProfile[] {
+  const byHost = new Map<string, HostProfile>();
+
+  for (const profile of existing) {
+    byHost.set(profile.host, profile);
+  }
+  for (const profile of incoming) {
+    byHost.set(profile.host, profile);
+  }
+
+  return Array.from(byHost.values()).sort((a, b) =>
+    a.host.localeCompare(b.host),
+  );
+}
+
 export async function runProfileBuilder(
   options: RunOptions = {},
 ): Promise<void> {
   const config = buildConfig({ ...options, writeRejects: false });
+  if (options.freshRun) {
+    await rm(config.hostProfilesFile, { force: true });
+  }
 
   if (!fileExists(config.inputUrlsFile)) {
     throw new Error(`Input URL file not found: ${config.inputUrlsFile}`);
   }
 
+  const existingProfiles = fileExists(config.hostProfilesFile)
+    ? await loadHostProfiles(config)
+    : [];
+  const passedHosts = new Set(existingProfiles.map((profile) => profile.host));
+
   console.log(`[seeds] reading ${config.inputUrlsFile}`);
   const seedHosts = await collectSeedHosts(config);
   console.log(`[seeds] hosts prepared: ${seedHosts.length}`);
 
-  console.log(`[profile] profiling hosts`);
-  const profiles = await profileHosts(config, seedHosts);
-  await writeJsonFile(config.hostProfilesFile, profiles);
+  const toProfile = seedHosts.filter((seedHost) => !passedHosts.has(seedHost.host));
+  const skippedHosts = seedHosts.length - toProfile.length;
 
-  const reachableHosts = profiles.filter(
+  console.log(`[profile] hosts already passed (skipped): ${skippedHosts}`);
+  console.log(`[profile] profiling hosts now: ${toProfile.length}`);
+  const newlyProfiled = await profileHosts(config, toProfile);
+  const mergedProfiles = mergeHostProfiles(existingProfiles, newlyProfiled);
+  await writeJsonFile(config.hostProfilesFile, mergedProfiles);
+
+  const reachableHosts = mergedProfiles.filter(
     (profile) => profile.reachability === "reachable",
   ).length;
   console.log(
-    `[profile] reachable hosts: ${reachableHosts}/${profiles.length}`,
+    `[profile] reachable hosts: ${reachableHosts}/${mergedProfiles.length}`,
   );
   console.log(`[profile] output: ${config.hostProfilesFile}`);
 }
@@ -441,8 +472,6 @@ export async function runDetailsOnly(options: RunOptions = {}): Promise<void> {
       processedUrls.add(record.url);
     },
   });
-
-  console.log(detailResult.jobs.map((job) => job.jobDetailUrl));
 
   const mergeResult = await mergeAndWriteJobs(config, detailResult.jobs);
   console.log(`[details] attempted now: ${detailResult.attemptedCount}`);

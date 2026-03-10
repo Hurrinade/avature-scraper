@@ -13,6 +13,7 @@ Minimal Bun + TypeScript scraper that follows `my-plan.md`.
 
 ```bash
 bun run profile
+bun run profile --fresh-run
 
 # Discovery-only (overwrites output/job_urls.jsonl)
 bun run discover --profile-source-mode=seeded

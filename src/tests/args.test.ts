@@ -48,9 +48,11 @@ describe("profile cli args", () => {
       "profile.ts",
       "--limit-hosts=3",
       "--host-profiles-file=output/custom-hosts.json",
+      "--fresh-run",
     ]);
     expect(parsed.limitHosts).toBe(3);
     expect(parsed.hostProfilesFile).toBe("output/custom-hosts.json");
+    expect(parsed.freshRun).toBeTrue();
   });
 });
 

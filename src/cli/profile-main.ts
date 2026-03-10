@@ -12,5 +12,6 @@ export async function profileMain(argv: string[]): Promise<void> {
     limitHosts: args.limitHosts,
     inputUrlsFile: args.inputUrlsFile,
     hostProfilesFile: args.hostProfilesFile,
+    freshRun: args.freshRun,
   });
 }

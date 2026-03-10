@@ -583,6 +583,262 @@ describe("split pipeline integration", () => {
     expect(zRequests).toEqual([]);
   });
 
+  test("runProfileBuilder skips hosts that already passed on rerun", async () => {
+    const fixture = await createFixture([
+      "https://a.example/careers",
+      "https://a.example/careers/SearchJobs?jobOffset=0&jobRecordsPerPage=12&listFilterMode=1",
+    ]);
+
+    const originalFetch = globalThis.fetch;
+    const firstRunRequests: string[] = [];
+    const firstRunMockFetch = buildMockFetch(firstRunRequests);
+    const firstRunHttpRequestFn = buildHttpRequestFromFetch(firstRunMockFetch);
+    globalThis.fetch = firstRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async () => true,
+        httpRequestFn: firstRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const secondRunRequests: string[] = [];
+    const secondRunMockFetch = buildMockFetch(secondRunRequests);
+    const secondRunHttpRequestFn = buildHttpRequestFromFetch(secondRunMockFetch);
+    globalThis.fetch = secondRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async () => true,
+        httpRequestFn: secondRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const profiles = await readJsonFile<HostProfile[]>(fixture.hostProfilesFile);
+    expect(profiles).toHaveLength(1);
+    expect(secondRunRequests).toEqual([]);
+  });
+
+  test("runProfileBuilder merges existing and newly profiled hosts", async () => {
+    const fixture = await createFixture([
+      "https://a.example/careers",
+    ]);
+
+    const buildProfileFetch = (requestLog: string[]) =>
+      (async (input: string | URL | Request): Promise<Response> => {
+        const raw =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const url = new URL(raw);
+        requestLog.push(url.toString());
+
+        if (
+          (url.hostname === "a.example" || url.hostname === "b.example") &&
+          url.pathname === "/careers"
+        ) {
+          return new Response("<html><body>Careers</body></html>", {
+            status: 200,
+            headers: { "content-type": "text/html" },
+          });
+        }
+
+        return new Response("Not found", { status: 404 });
+      }) as typeof fetch;
+
+    const originalFetch = globalThis.fetch;
+    const firstRunRequests: string[] = [];
+    const firstRunMockFetch = buildProfileFetch(firstRunRequests);
+    const firstRunHttpRequestFn = buildHttpRequestFromFetch(firstRunMockFetch);
+    globalThis.fetch = firstRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async (host) => host === "a.example" || host === "b.example",
+        httpRequestFn: firstRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    await writeFile(
+      fixture.inputPath,
+      ["https://a.example/careers", "https://b.example/careers"].join("\n"),
+      "utf8",
+    );
+
+    const secondRunRequests: string[] = [];
+    const secondRunMockFetch = buildProfileFetch(secondRunRequests);
+    const secondRunHttpRequestFn = buildHttpRequestFromFetch(secondRunMockFetch);
+    globalThis.fetch = secondRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async (host) => host === "a.example" || host === "b.example",
+        httpRequestFn: secondRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const profiles = await readJsonFile<HostProfile[]>(fixture.hostProfilesFile);
+    expect(profiles.map((profile) => profile.host).sort()).toEqual([
+      "a.example",
+      "b.example",
+    ]);
+    expect(secondRunRequests.some((request) => request.startsWith("https://a.example/"))).toBeFalse();
+    expect(secondRunRequests.some((request) => request.startsWith("https://b.example/"))).toBeTrue();
+  });
+
+  test("runProfileBuilder marks blocked and unreachable hosts as passed and skips them later", async () => {
+    const fixture = await createFixture([
+      "https://blocked.example/careers",
+      "https://down.example/careers",
+    ]);
+
+    const buildStatusFetch = (requestLog: string[]) =>
+      (async (input: string | URL | Request): Promise<Response> => {
+        const raw =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const url = new URL(raw);
+        requestLog.push(url.toString());
+
+        if (url.hostname === "blocked.example" && url.pathname === "/careers") {
+          return new Response("blocked", { status: 403 });
+        }
+        if (url.hostname === "down.example" && url.pathname === "/careers") {
+          return new Response("down", { status: 500 });
+        }
+
+        return new Response("Not found", { status: 404 });
+      }) as typeof fetch;
+
+    const originalFetch = globalThis.fetch;
+    const firstRunRequests: string[] = [];
+    const firstRunMockFetch = buildStatusFetch(firstRunRequests);
+    const firstRunHttpRequestFn = buildHttpRequestFromFetch(firstRunMockFetch);
+    globalThis.fetch = firstRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async () => true,
+        httpRequestFn: firstRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const firstProfiles = await readJsonFile<HostProfile[]>(fixture.hostProfilesFile);
+    expect(firstProfiles.find((profile) => profile.host === "blocked.example")?.reachability).toBe("blocked");
+    expect(firstProfiles.find((profile) => profile.host === "down.example")?.reachability).toBe("unreachable");
+
+    const secondRunRequests: string[] = [];
+    const secondRunMockFetch = buildStatusFetch(secondRunRequests);
+    const secondRunHttpRequestFn = buildHttpRequestFromFetch(secondRunMockFetch);
+    globalThis.fetch = secondRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async () => true,
+        httpRequestFn: secondRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(secondRunRequests).toEqual([]);
+  });
+
+  test("runProfileBuilder fresh-run reprofiles previously passed hosts", async () => {
+    const fixture = await createFixture([
+      "https://a.example/careers",
+    ]);
+
+    const originalFetch = globalThis.fetch;
+    const firstRunRequests: string[] = [];
+    const firstRunMockFetch = buildMockFetch(firstRunRequests);
+    const firstRunHttpRequestFn = buildHttpRequestFromFetch(firstRunMockFetch);
+    globalThis.fetch = firstRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        seedProbeFn: async () => true,
+        httpRequestFn: firstRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const secondRunRequests: string[] = [];
+    const secondRunMockFetch = buildMockFetch(secondRunRequests);
+    const secondRunHttpRequestFn = buildHttpRequestFromFetch(secondRunMockFetch);
+    globalThis.fetch = secondRunMockFetch;
+    try {
+      await runProfileBuilder({
+        inputUrlsFile: fixture.inputPath,
+        outputDir: fixture.outputDir,
+        requestTimeoutMs: 500,
+        maxRetries: 0,
+        retryBaseDelayMs: 1,
+        profileConcurrency: 2,
+        freshRun: true,
+        seedProbeFn: async () => true,
+        httpRequestFn: secondRunHttpRequestFn,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(secondRunRequests.some((request) =>
+      request.startsWith("https://a.example/careers"),
+    )).toBeTrue();
+  });
+
   test("runDiscoveryOnly writes job_urls.jsonl without fetching job detail pages", async () => {
     const fixture = await createFixture();
 
