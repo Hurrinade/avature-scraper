@@ -99,6 +99,8 @@ async function crawlListingTemplate(
       paginationEnabled,
     );
 
+    console.log("Discovering url", pageUrl);
+
     try {
       const response = await performHttpRequest(
         pageUrl,

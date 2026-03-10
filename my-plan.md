@@ -77,7 +77,7 @@ Data is retrieved from html as jobs have recognizable html structure which can b
 - final data cleanup so all metadata is same per each job currently it is with different keys as many sites have different labels for their job metadata
 - Initial discovery of more urls and hosts which can be scraped, this gets stored to some file for future scraper to use, I have hit some bot detection limitation so I did not go deeper into avoiding those as I don't think it is in scope of the assesment
 
-## Relevant files
+## Relevant files which are stored in `OUTPUT` folder
 
 - `host_profiles.json` - file with all hosts and their seeded reachable urls which are separated based on jobDetail urls and job list urls (searchJobs)
 - `job_urls.jsonl` is file with list of jobDetail urls gathered from job listings or the ones already there from initial Urls.txt file
