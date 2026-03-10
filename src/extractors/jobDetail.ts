@@ -133,8 +133,6 @@ export function extractJobDetail(
     ? cleanTextFromHtml(descriptionHtml)
     : firstNonEmpty($("main").text(), $("article").text());
 
-  console.log("descriptionText", descriptionText);
-
   const metadata = extractMetadata($);
 
   const location = firstNonEmpty(
